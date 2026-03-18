@@ -5,3 +5,4 @@ oauth2client
 matplotlib
 plotly
 openpyxl
+reportlab
