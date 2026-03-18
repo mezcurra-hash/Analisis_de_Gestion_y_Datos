@@ -378,6 +378,17 @@ with st.sidebar:
     )
     st.markdown("<hr>", unsafe_allow_html=True)
 
+# Hint de reapertura cuando sidebar está colapsado
+st.markdown(f"""
+<div style="position:fixed; bottom:16px; left:16px; z-index:9999;
+            background:{ACCENT}; color:#13151F; border-radius:20px;
+            padding:6px 14px; font-size:12px; font-weight:700;
+            cursor:pointer; opacity:0.85;"
+     title="Presioná [ para abrir el menú">
+    ☰ Menú — presioná [
+</div>
+""", unsafe_allow_html=True)
+
 # ============================================================
 # APP 1: OFERTA DE TURNOS
 # ============================================================
