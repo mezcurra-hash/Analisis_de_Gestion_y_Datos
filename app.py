@@ -763,11 +763,11 @@ elif app_mode == "📉  Ausentismo":
                         orientation="v",
                         x=1.02, y=0.5,
                         xanchor="left", yanchor="middle",
-                        font=dict(size=11),
+                        font=dict(size=12),
                         itemwidth=30,
                     ),
-                    margin=dict(l=10, r=140, t=40, b=10),
-                    height=340,
+                    margin=dict(l=20, r=160, t=40, b=20),
+                    height=420,
                 )
                 st.plotly_chart(fig_pie, use_container_width=True)
 
@@ -781,23 +781,58 @@ elif app_mode == "📉  Ausentismo":
                 fig_hs.update_traces(texttemplate='%{text:,.0f}', textposition='outside',
                                      marker_line_width=0)
                 fig_hs.update_coloraxes(showscale=False)
-                apply_plotly_defaults(fig_hs, f"Top 10 servicios afectados")
-                fig_hs.update_layout(height=360)
+                apply_plotly_defaults(fig_hs, "Top 10 servicios afectados")
+                fig_hs.update_layout(height=420)
                 st.plotly_chart(fig_hs, use_container_width=True)
 
-        # Top profesionales
+        # Top profesionales — tooltip con desglose de motivos para cada uno
         if 'PROFESIONAL' in df_y.columns:
             st.markdown("<hr>", unsafe_allow_html=True)
             d_prof = df_y.groupby('PROFESIONAL')[col_target].sum().reset_index()\
                          .sort_values(col_target).tail(15)
-            fig_p = px.bar(d_prof, x=col_target, y='PROFESIONAL', orientation='h',
-                           text=col_target, color=col_target,
-                           color_continuous_scale=[[0, BLUE_DARK],[0.5, BLUE_LIGHT],[1, ACCENT]])
-            fig_p.update_traces(texttemplate='%{text:,.0f}', textposition='outside',
-                                marker_line_width=0)
-            fig_p.update_coloraxes(showscale=False)
+
+            # Construir texto de tooltip con desglose de motivos por profesional
+            if 'MOTIVO' in df_y.columns:
+                def motivos_tooltip(prof_nombre):
+                    sub = df_y[df_y['PROFESIONAL'] == prof_nombre]\
+                              .groupby('MOTIVO')[col_target].sum()\
+                              .sort_values(ascending=False)
+                    lines = [f"  {m}: {int(v)}" for m, v in sub.items()]
+                    return "<br>".join(lines)
+
+                d_prof['tooltip_motivos'] = d_prof['PROFESIONAL'].apply(motivos_tooltip)
+
+                fig_p = go.Figure(go.Bar(
+                    x=d_prof[col_target],
+                    y=d_prof['PROFESIONAL'],
+                    orientation='h',
+                    text=d_prof[col_target],
+                    texttemplate='%{text:,.0f}',
+                    textposition='outside',
+                    marker=dict(
+                        color=d_prof[col_target],
+                        colorscale=[[0, BLUE_DARK],[0.5, BLUE_LIGHT],[1, ACCENT]],
+                        line_width=0,
+                    ),
+                    customdata=d_prof['tooltip_motivos'],
+                    hovertemplate=(
+                        "<b>%{y}</b><br>"
+                        f"<b>Total {col_target.replace('_',' ').title()}:</b> %{{x:,.0f}}<br>"
+                        "<br><b>Desglose por motivo:</b><br>"
+                        "%{customdata}"
+                        "<extra></extra>"
+                    ),
+                ))
+            else:
+                fig_p = px.bar(d_prof, x=col_target, y='PROFESIONAL', orientation='h',
+                               text=col_target, color=col_target,
+                               color_continuous_scale=[[0, BLUE_DARK],[0.5, BLUE_LIGHT],[1, ACCENT]])
+                fig_p.update_traces(texttemplate='%{text:,.0f}', textposition='outside',
+                                    marker_line_width=0)
+                fig_p.update_coloraxes(showscale=False)
+
             apply_plotly_defaults(fig_p, "Top 15 profesionales con mayor ausentismo")
-            fig_p.update_layout(height=max(400, len(d_prof)*28))
+            fig_p.update_layout(height=max(420, len(d_prof)*30))
             st.plotly_chart(fig_p, use_container_width=True)
 
         # Evolución mensual
