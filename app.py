@@ -3,6 +3,18 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
+import io
+import numpy as np
+
+# PDF opcional — requiere: pip install reportlab
+try:
+    from reportlab.lib.pagesizes import A4, landscape
+    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+    from reportlab.lib.styles import getSampleStyleSheet
+    from reportlab.lib import colors as rl_colors
+    PDF_OK = True
+except ImportError:
+    PDF_OK = False
 
 # ============================================================
 # CONFIGURACIÓN GLOBAL
@@ -183,6 +195,34 @@ st.markdown(f"""
       padding: 14px 18px;
       border-radius: 12px;
   }}
+
+  /* ── KPI alerta (SLA bajo meta) ── */
+  .kpi-card-alert {{
+      background: {CARD_BG};
+      border: 1px solid {ACCENT2} !important;
+      border-radius: 12px;
+      padding: 18px 20px;
+      position: relative;
+      overflow: hidden;
+      animation: pulse-border 2s ease-in-out infinite;
+  }}
+  .kpi-card-alert::before {{
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 3px;
+      background: linear-gradient(90deg, {ACCENT2}, #FF3333);
+  }}
+  @keyframes pulse-border {{
+      0%, 100% {{ box-shadow: 0 0 0 0 rgba(255,107,107,0); }}
+      50%       {{ box-shadow: 0 0 8px 2px rgba(255,107,107,0.25); }}
+  }}
+  .kpi-alert-msg {{
+      font-size: 11px;
+      color: {ACCENT2};
+      font-weight: 700;
+      margin-top: 5px;
+  }}
 </style>
 """, unsafe_allow_html=True)
 
@@ -200,8 +240,8 @@ def fmt_fecha(fecha):
 def fmt_num(n, decimals=0):
     return f"{n:,.{decimals}f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
-def kpi_card(label, value, delta=None, delta_pct=None, prefix="", suffix=""):
-    """Renderiza una tarjeta KPI custom con HTML."""
+def kpi_card(label, value, delta=None, delta_pct=None, prefix="", suffix="", alert=False):
+    """Renderiza una tarjeta KPI custom con HTML. alert=True activa borde rojo."""
     val_str = f"{prefix}{fmt_num(value)}{suffix}"
     delta_html = ""
     if delta is not None:
@@ -210,13 +250,92 @@ def kpi_card(label, value, delta=None, delta_pct=None, prefix="", suffix=""):
         icon  = "▲" if delta > 0 else ("▼" if delta < 0 else "●")
         pct_s = f" ({sign}{delta_pct:.1f}%)" if delta_pct is not None else ""
         delta_html = f'<div class="{cls}">{icon} {sign}{fmt_num(delta)}{suffix}{pct_s}</div>'
+    alert_html = '<div class="kpi-alert-msg">⚠️ Por debajo de la meta (90%)</div>' if alert else ""
+    card_class = "kpi-card-alert" if alert else "kpi-card"
     return f"""
-    <div class="kpi-card">
+    <div class="{card_class}">
         <div class="kpi-label">{label}</div>
         <div class="kpi-value">{val_str}</div>
         {delta_html}
+        {alert_html}
     </div>
     """
+
+# ============================================================
+# HELPERS — EXPORTACIÓN
+# ============================================================
+def generar_excel(df: pd.DataFrame, nombre_hoja: str = "Datos") -> bytes:
+    buf = io.BytesIO()
+    with pd.ExcelWriter(buf, engine="openpyxl") as writer:
+        df.to_excel(writer, sheet_name=nombre_hoja, index=True)
+    return buf.getvalue()
+
+def generar_pdf(df: pd.DataFrame, titulo: str = "Reporte CEMIC") -> bytes:
+    if not PDF_OK:
+        return b""
+    buf = io.BytesIO()
+    doc = SimpleDocTemplate(buf, pagesize=landscape(A4),
+                            leftMargin=20, rightMargin=20,
+                            topMargin=30, bottomMargin=20)
+    styles = getSampleStyleSheet()
+    elements = []
+
+    # Título
+    elements.append(Paragraph(titulo, styles['Title']))
+    elements.append(Spacer(1, 12))
+
+    # Reset index para incluirlo como columna
+    df_reset = df.reset_index()
+    data = [list(df_reset.columns)] + df_reset.astype(str).values.tolist()
+
+    t = Table(data, repeatRows=1)
+    t.setStyle(TableStyle([
+        ('BACKGROUND', (0,0), (-1,0), rl_colors.HexColor('#1E2130')),
+        ('TEXTCOLOR',  (0,0), (-1,0), rl_colors.white),
+        ('FONTNAME',   (0,0), (-1,0), 'Helvetica-Bold'),
+        ('FONTSIZE',   (0,0), (-1,-1), 7),
+        ('ROWBACKGROUNDS', (0,1), (-1,-1),
+         [rl_colors.HexColor('#13151F'), rl_colors.HexColor('#1A1D2E')]),
+        ('TEXTCOLOR',  (0,1), (-1,-1), rl_colors.HexColor('#CDD6F4')),
+        ('GRID',       (0,0), (-1,-1), 0.3, rl_colors.HexColor('#2D3250')),
+        ('ALIGN',      (1,1), (-1,-1), 'RIGHT'),
+        ('TOPPADDING', (0,0), (-1,-1), 4),
+        ('BOTTOMPADDING', (0,0), (-1,-1), 4),
+    ]))
+    elements.append(t)
+    doc.build(elements)
+    return buf.getvalue()
+
+def botones_exportacion(df: pd.DataFrame, nombre_archivo: str, titulo_pdf: str):
+    """Renderiza los botones de descarga Excel y PDF lado a lado."""
+    col_xl, col_pdf, _ = st.columns([1, 1, 4])
+    excel_bytes = generar_excel(df, nombre_archivo[:31])
+    col_xl.download_button(
+        label="⬇️ Excel",
+        data=excel_bytes,
+        file_name=f"{nombre_archivo}.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        use_container_width=True,
+    )
+    if PDF_OK:
+        pdf_bytes = generar_pdf(df, titulo_pdf)
+        col_pdf.download_button(
+            label="⬇️ PDF",
+            data=pdf_bytes,
+            file_name=f"{nombre_archivo}.pdf",
+            mime="application/pdf",
+            use_container_width=True,
+        )
+    else:
+        col_pdf.caption("PDF: instalar reportlab")
+
+# ============================================================
+# SESSION STATE — Filtro cruzado entre módulos
+# ============================================================
+if 'cross_servicio' not in st.session_state:
+    st.session_state['cross_servicio'] = []
+if 'cross_depto' not in st.session_state:
+    st.session_state['cross_depto'] = []
 
 def apply_plotly_defaults(fig, title=""):
     fig.update_layout(**PLOTLY_LAYOUT)
@@ -293,13 +412,20 @@ if app_mode == "🏥  Oferta de Turnos":
 
             with st.expander("🔍  Filtros"):
                 filtro_tipo = st.radio("Modalidad", ["Todos","AP","ANP"], horizontal=True)
-                depto = st.multiselect("Departamento", sorted(df['DEPARTAMENTO'].unique()))
-                serv  = st.multiselect("Servicio",     sorted(df['SERVICIO'].unique()))
+                depto = st.multiselect("Departamento", sorted(df['DEPARTAMENTO'].unique()),
+                                       default=st.session_state['cross_depto'] if st.session_state['cross_depto'] else [])
+                serv  = st.multiselect("Servicio",     sorted(df['SERVICIO'].unique()),
+                                       default=st.session_state['cross_servicio'] if st.session_state['cross_servicio'] else [])
                 sede  = st.multiselect("Sede",         sorted(df['SEDE'].unique()))
                 if 'PROFESIONAL/EQUIPO' in df.columns:
                     prof = st.multiselect("Profesional", sorted(df['PROFESIONAL/EQUIPO'].astype(str).unique()))
                 else:
                     prof = []
+                # Guardar selección para filtro cruzado
+                st.session_state['cross_servicio'] = serv
+                st.session_state['cross_depto']    = depto
+                if serv or depto:
+                    st.caption(f"🔗 Filtro activo · se aplicará en Ausentismo")
 
             st.markdown("<hr>", unsafe_allow_html=True)
 
@@ -356,7 +482,7 @@ if app_mode == "🏥  Oferta de Turnos":
 
             st.markdown("<br>", unsafe_allow_html=True)
 
-            tab_graf, tab_tabla = st.tabs(["📊  Gráfico", "📄  Tabla dinámica"])
+            tab_graf, tab_tabla, tab_trend = st.tabs(["📊  Gráfico", "📄  Tabla dinámica", "📈  Tendencia"])
 
             with tab_graf:
                 agrup_col = filas_sel[0]
@@ -383,6 +509,96 @@ if app_mode == "🏥  Oferta de Turnos":
                     tabla.style.format("{:,.0f}").background_gradient(cmap='Blues'),
                     use_container_width=True
                 )
+                st.markdown("<br>", unsafe_allow_html=True)
+                botones_exportacion(
+                    tabla,
+                    nombre_archivo=f"turnos_{'-'.join([fmt_fecha(m).replace(' ','_') for m in sorted(meses_sel)])}",
+                    titulo_pdf=f"Oferta de Turnos — {nombres}"
+                )
+
+            with tab_trend:
+                # ── Proyección de tendencia lineal ──────────────
+                metrica_t = val_sel[0]
+                # Serie histórica completa (sin filtro de período)
+                df_hist = df.copy()
+                if filtro_tipo == "AP"  and 'TIPO_ATENCION' in df_hist.columns: df_hist = df_hist[df_hist['TIPO_ATENCION']=='AP']
+                if filtro_tipo == "ANP" and 'TIPO_ATENCION' in df_hist.columns: df_hist = df_hist[df_hist['TIPO_ATENCION']=='ANP']
+                if depto: df_hist = df_hist[df_hist['DEPARTAMENTO'].isin(depto)]
+                if serv:  df_hist = df_hist[df_hist['SERVICIO'].isin(serv)]
+
+                serie = df_hist.groupby('PERIODO')[metrica_t].sum().reset_index().sort_values('PERIODO')
+
+                if len(serie) < 3:
+                    st.info("Se necesitan al menos 3 períodos históricos para calcular la tendencia.")
+                else:
+                    # Regresión lineal con numpy
+                    x = np.arange(len(serie))
+                    y = serie[metrica_t].values
+                    coef = np.polyfit(x, y, 1)
+                    poly = np.poly1d(coef)
+
+                    # Proyectar 3 meses hacia adelante
+                    N_PROJ = 3
+                    ultimo_mes = serie['PERIODO'].max()
+                    fechas_proj = [ultimo_mes + pd.DateOffset(months=i+1) for i in range(N_PROJ)]
+                    x_proj = np.arange(len(serie), len(serie) + N_PROJ)
+                    y_proj = poly(x_proj)
+
+                    fig_t = go.Figure()
+                    # Línea histórica real
+                    fig_t.add_trace(go.Scatter(
+                        x=serie['PERIODO'], y=serie[metrica_t],
+                        name='Histórico', mode='lines+markers',
+                        line=dict(color=BLUE_LIGHT, width=2),
+                        marker=dict(size=6),
+                        fill='tozeroy', fillcolor='rgba(79,195,247,0.1)',
+                    ))
+                    # Línea de tendencia sobre histórico
+                    fig_t.add_trace(go.Scatter(
+                        x=serie['PERIODO'], y=poly(x),
+                        name='Tendencia', mode='lines',
+                        line=dict(color=ACCENT3, width=2, dash='dot'),
+                    ))
+                    # Proyección futura
+                    # Conectar último punto real con proyección
+                    x_ext = [serie['PERIODO'].iloc[-1]] + fechas_proj
+                    y_ext = [float(poly(len(serie)-1))] + list(y_proj)
+                    fig_t.add_trace(go.Scatter(
+                        x=x_ext, y=y_ext,
+                        name='Proyección', mode='lines+markers',
+                        line=dict(color=ACCENT2, width=2, dash='dash'),
+                        marker=dict(size=8, symbol='diamond'),
+                        fill='tozeroy', fillcolor='rgba(255,107,107,0.08)',
+                    ))
+                    # Línea vertical que separa histórico de proyección
+                    fig_t.add_vline(
+                        x=ultimo_mes.timestamp() * 1000,
+                        line_width=1, line_dash="dot",
+                        line_color=TEXT_MUTED,
+                        annotation_text="  Hoy",
+                        annotation_font_color=TEXT_MUTED,
+                        annotation_position="top right",
+                    )
+
+                    pendiente_dir = "creciente 📈" if coef[0] > 0 else "decreciente 📉"
+                    apply_plotly_defaults(fig_t, f"Tendencia y proyección · {metrica_t.replace('_',' ').title()}")
+                    fig_t.update_layout(height=400)
+                    st.plotly_chart(fig_t, use_container_width=True)
+
+                    # Resumen de proyección
+                    cols_p = st.columns(N_PROJ)
+                    for i, (fp, yp) in enumerate(zip(fechas_proj, y_proj)):
+                        label_p = f"{MESES_FULL[fp.month]} {fp.year}"
+                        cols_p[i].markdown(kpi_card(f"Proyección {label_p}", max(0, yp)), unsafe_allow_html=True)
+
+                    st.markdown(f"""
+                    <div style="margin-top:12px; padding:10px 14px; background:{CARD_BG};
+                                border:1px solid {BORDER}; border-radius:8px; font-size:12px; color:{TEXT_MUTED};">
+                        <b style="color:#CDD6F4;">Método:</b> Regresión lineal (mínimos cuadrados) · 
+                        Tendencia <b style="color:#CDD6F4;">{pendiente_dir}</b> · 
+                        Pendiente: <b style="color:#CDD6F4;">{coef[0]:+,.0f} turnos/mes</b>
+                    </div>
+                    """, unsafe_allow_html=True)
 
         # ════════════════════════════════════════════════════
         # VISTA COMPARATIVA (multi-período)
@@ -463,6 +679,12 @@ if app_mode == "🏥  Oferta de Turnos":
                                .format("{:.1f}%", subset=['Var %'])
                                .background_gradient(cmap='RdYlGn', subset=['Diferencia']),
                     use_container_width=True
+                )
+                st.markdown("<br>", unsafe_allow_html=True)
+                botones_exportacion(
+                    df_var,
+                    nombre_archivo=f"comparativa_{fmt_fecha(sorted_meses[0]).replace(' ','_')}_vs_{fmt_fecha(sorted_meses[-1]).replace(' ','_')}",
+                    titulo_pdf=f"Comparativa de Turnos — {nombres}"
                 )
 
     except Exception as e:
@@ -548,7 +770,7 @@ elif app_mode == "🎧  Call Center":
             c1.markdown(kpi_card("Llamadas Recibidas", rec, d1, p1), unsafe_allow_html=True)
             c2.markdown(kpi_card("Atendidas", aten, d2, p2), unsafe_allow_html=True)
             c3.markdown(kpi_card("Abandonadas", perd, d3, p3), unsafe_allow_html=True)
-            c4.markdown(kpi_card("Nivel de Servicio", sla, suffix="%"), unsafe_allow_html=True)
+            c4.markdown(kpi_card("Nivel de Servicio", sla, suffix="%", alert=(sla < 90)), unsafe_allow_html=True)
 
             st.markdown("<br>", unsafe_allow_html=True)
             col1, col2 = st.columns(2)
@@ -702,10 +924,28 @@ elif app_mode == "📉  Ausentismo":
             if meses_sel: df_y = df_y[df_y['MES_NUM'].isin(meses_sel)]
 
             st.markdown("<hr>", unsafe_allow_html=True)
+            # Filtro cruzado — leer session_state de Turnos
+            cross_srv = st.session_state.get('cross_servicio', [])
+            cross_dpt = st.session_state.get('cross_depto', [])
+            if cross_srv or cross_dpt:
+                st.markdown(f"""
+                <div style="background:rgba(0,191,165,0.1);border:1px solid rgba(0,191,165,0.3);
+                            border-radius:8px;padding:8px 10px;font-size:11px;color:{ACCENT};margin-bottom:8px;">
+                    🔗 <b>Filtro cruzado activo desde Turnos</b>
+                </div>
+                """, unsafe_allow_html=True)
+
             for col in ['DEPARTAMENTO','SERVICIO','MOTIVO','PROFESIONAL']:
                 if col in df_y.columns:
                     opciones = sorted(df_y[col].astype(str).unique())
-                    sel = st.multiselect(col, opciones)
+                    # Pre-cargar desde session_state si corresponde
+                    if col == 'SERVICIO' and cross_srv:
+                        default_val = [s for s in cross_srv if s in opciones]
+                    elif col == 'DEPARTAMENTO' and cross_dpt:
+                        default_val = [d for d in cross_dpt if d in opciones]
+                    else:
+                        default_val = []
+                    sel = st.multiselect(col, opciones, default=default_val)
                     if sel: df_y = df_y[df_y[col].isin(sel)]
 
         if df_y.empty:
@@ -856,6 +1096,12 @@ elif app_mode == "📉  Ausentismo":
 
         with st.expander("📄 Ver registros detallados"):
             st.dataframe(df_y, use_container_width=True)
+            st.markdown("<br>", unsafe_allow_html=True)
+            botones_exportacion(
+                df_y,
+                nombre_archivo=f"ausentismo_{año_sel}",
+                titulo_pdf=f"Ausentismo y Licencias — {año_sel}"
+            )
 
     except Exception as e:
         st.error(f"❌ Error en Ausentismo: {e}")
