@@ -767,7 +767,7 @@ elif app_mode == "📉  Ausentismo":
                            text=col_target, color=col_target,
                            color_continuous_scale=[[0, BLUE_DARK],[0.5, BLUE_LIGHT],[1, ACCENT]])
             fig_p.update_traces(texttemplate='%{text:,.0f}', textposition='outside',
-                                marker_line_width=width := 0)
+                                marker_line_width=0)
             fig_p.update_coloraxes(showscale=False)
             apply_plotly_defaults(fig_p, "Top 15 profesionales con mayor ausentismo")
             fig_p.update_layout(height=max(400, len(d_prof)*28))
