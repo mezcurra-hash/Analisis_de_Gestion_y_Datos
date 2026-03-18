@@ -188,6 +188,17 @@ st.markdown(f"""
       border-radius: 10px;
   }}
 
+  /* ── Sidebar toggle — más visible ── */
+  [data-testid="collapsedControl"] {{
+      background-color: {ACCENT} !important;
+      border-radius: 0 8px 8px 0 !important;
+      width: 28px !important;
+      opacity: 1 !important;
+  }}
+  [data-testid="collapsedControl"] svg {{
+      color: #13151F !important;
+  }}
+
   /* ── Métricas nativas (fallback) ── */
   div[data-testid="stMetric"] {{
       background-color: {CARD_BG};
