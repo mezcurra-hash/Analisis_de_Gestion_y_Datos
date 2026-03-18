@@ -23,7 +23,7 @@ st.set_page_config(
     page_title="CEMIC · Tablero de Gestión",
     layout="wide",
     page_icon="🏥",
-    initial_sidebar_state="expanded"
+    initial_sidebar_state="auto"
 )
 
 # ============================================================
@@ -186,17 +186,6 @@ st.markdown(f"""
       background: {CARD_BG};
       border: 1px solid {BORDER} !important;
       border-radius: 10px;
-  }}
-
-  /* ── Sidebar toggle — más visible ── */
-  [data-testid="collapsedControl"] {{
-      background-color: {ACCENT} !important;
-      border-radius: 0 8px 8px 0 !important;
-      width: 28px !important;
-      opacity: 1 !important;
-  }}
-  [data-testid="collapsedControl"] svg {{
-      color: #13151F !important;
   }}
 
   /* ── Métricas nativas (fallback) ── */
