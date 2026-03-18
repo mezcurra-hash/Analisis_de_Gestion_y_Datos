@@ -492,7 +492,6 @@ if app_mode == "🏥  Oferta de Turnos":
                 cols_kpi[i].markdown(kpi_card(label, val_actual, delta, delta_pct), unsafe_allow_html=True)
 
             st.markdown("<br>", unsafe_allow_html=True)
-
             tab_graf, tab_tabla, tab_trend = st.tabs(["📊  Gráfico", "📄  Tabla dinámica", "📈  Tendencia"])
 
             with tab_graf:
@@ -781,7 +780,9 @@ elif app_mode == "🎧  Call Center":
             c1.markdown(kpi_card("Llamadas Recibidas", rec, d1, p1), unsafe_allow_html=True)
             c2.markdown(kpi_card("Atendidas", aten, d2, p2), unsafe_allow_html=True)
             c3.markdown(kpi_card("Abandonadas", perd, d3, p3), unsafe_allow_html=True)
-            c4.markdown(kpi_card("Nivel de Servicio", sla, suffix="%", alert=(sla < 90)), unsafe_allow_html=True)
+            c4.markdown(kpi_card("Nivel de Servicio", sla, suffix="%"), unsafe_allow_html=True)
+            if sla < 90:
+                c4.error(f"⚠️ Bajo meta — {sla:.1f}% < 90%")
 
             st.markdown("<br>", unsafe_allow_html=True)
             col1, col2 = st.columns(2)
