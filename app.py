@@ -519,7 +519,7 @@ elif app_mode == "🎧  Call Center":
         if "Mensual" in modo:
             fechas = sorted(df['FECHA_REAL'].unique(), reverse=True)
             sel    = st.selectbox("Período", fechas,
-                                  format_func=lambda x: x.strftime("%B %Y").capitalize())
+                                  format_func=lambda x: f"{MESES_FULL[x.month]} {x.year}")
 
             d    = df[df['FECHA_REAL'] == sel].iloc[0]
             d_ant = df[df['FECHA_REAL'] < sel].sort_values('FECHA_REAL').iloc[-1] if len(df[df['FECHA_REAL'] < sel]) > 0 else None
@@ -536,7 +536,7 @@ elif app_mode == "🎧  Call Center":
 
             sla = (aten / rec * 100) if rec > 0 else 0
 
-            st.markdown(f'<div class="section-subtitle">Período seleccionado · <span class="badge">{sel.strftime("%B %Y").capitalize()}</span></div>', unsafe_allow_html=True)
+            st.markdown(f'<div class="section-subtitle">Período seleccionado · <span class="badge">{MESES_FULL[sel.month]} {sel.year}</span></div>', unsafe_allow_html=True)
 
             def delta_or_none(v, va): return (v-va, (v-va)/va*100) if va > 0 else (None, None)
 
@@ -736,12 +736,39 @@ elif app_mode == "📉  Ausentismo":
 
         with col1:
             if 'MOTIVO' in df_y.columns:
-                df_mot = df_y.groupby('MOTIVO')[col_target].sum().reset_index().sort_values(col_target, ascending=False)
-                fig_pie = px.pie(df_mot, values=col_target, names='MOTIVO', hole=0.5,
-                                 color_discrete_sequence=[ACCENT, BLUE_LIGHT, ACCENT3, ACCENT2,
-                                                          "#B39DDB","#80DEEA","#FFCC80"])
-                fig_pie.update_traces(textinfo='percent+label', marker_line_width=0)
-                apply_plotly_defaults(fig_pie, f"Distribución por motivo")
+                # Agrupar motivos menores en "Otros" — solo Top 8 visibles
+                df_mot_full = df_y.groupby('MOTIVO')[col_target].sum().reset_index().sort_values(col_target, ascending=False)
+                TOP_N = 8
+                if len(df_mot_full) > TOP_N:
+                    top8     = df_mot_full.head(TOP_N)
+                    otros    = pd.DataFrame([{'MOTIVO': 'OTROS', col_target: df_mot_full.iloc[TOP_N:][col_target].sum()}])
+                    df_mot   = pd.concat([top8, otros], ignore_index=True)
+                else:
+                    df_mot = df_mot_full
+
+                COLOR_SEQ = [ACCENT, BLUE_LIGHT, ACCENT3, ACCENT2, "#B39DDB", "#80DEEA", "#FFCC80", "#F48FB1", "#AAAAAA"]
+                fig_pie = go.Figure(go.Pie(
+                    labels=df_mot['MOTIVO'],
+                    values=df_mot[col_target],
+                    hole=0.52,
+                    marker=dict(colors=COLOR_SEQ[:len(df_mot)],
+                                line=dict(color='rgba(0,0,0,0)', width=0)),
+                    textinfo='percent',
+                    hovertemplate='<b>%{label}</b><br>%{value:,.0f}<br>%{percent}<extra></extra>',
+                    insidetextorientation='radial',
+                ))
+                apply_plotly_defaults(fig_pie, "Distribución por motivo")
+                fig_pie.update_layout(
+                    legend=dict(
+                        orientation="v",
+                        x=1.02, y=0.5,
+                        xanchor="left", yanchor="middle",
+                        font=dict(size=11),
+                        itemwidth=30,
+                    ),
+                    margin=dict(l=10, r=140, t=40, b=10),
+                    height=340,
+                )
                 st.plotly_chart(fig_pie, use_container_width=True)
 
         with col2:
