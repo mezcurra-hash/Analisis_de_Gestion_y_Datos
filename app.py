@@ -580,13 +580,14 @@ if app_mode == "🏥  Oferta de Turnos":
                         marker=dict(size=8, symbol='diamond'),
                         fill='tozeroy', fillcolor='rgba(255,107,107,0.08)',
                     ))
-                    # Línea vertical que separa histórico de proyección
+                    # Línea vertical con la fecha real de hoy
+                    hoy = pd.Timestamp.today().normalize()
                     fig_t.add_vline(
-                        x=ultimo_mes.timestamp() * 1000,
+                        x=hoy.timestamp() * 1000,
                         line_width=1, line_dash="dot",
-                        line_color=TEXT_MUTED,
-                        annotation_text="  Hoy",
-                        annotation_font_color=TEXT_MUTED,
+                        line_color=ACCENT,
+                        annotation_text=f"  Hoy ({MESES_FULL[hoy.month]} {hoy.year})",
+                        annotation_font_color=ACCENT,
                         annotation_position="top right",
                     )
 
