@@ -2,45 +2,35 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
-from plotly.subplots import make_subplots
 import io
 import numpy as np
-
-# PDF opcional — requiere: pip install reportlab
-try:
-    from reportlab.lib.pagesizes import A4, landscape
-    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
-    from reportlab.lib.styles import getSampleStyleSheet
-    from reportlab.lib import colors as rl_colors
-    PDF_OK = True
-except ImportError:
-    PDF_OK = False
 
 # ============================================================
 # CONFIGURACIÓN GLOBAL
 # ============================================================
 st.set_page_config(
-    page_title="CEMIC · Tablero de Gestión",
+    page_title="CEMIC · Simulador Financiero",
     layout="wide",
-    page_icon="🏥",
+    page_icon="💰",
     initial_sidebar_state="auto"
 )
 
 # ============================================================
-# PALETA Y ESTILOS GLOBALES
+# SISTEMA DE DISEÑO
 # ============================================================
-ACCENT      = "#00BFA5"   # Teal principal
-ACCENT2     = "#FF6B6B"   # Rojo suave para negativo
-ACCENT3     = "#FFB74D"   # Ámbar para neutro/advertencia
+ACCENT      = "#00BFA5"
+ACCENT2     = "#FF6B6B"
+ACCENT3     = "#FFB74D"
+ACCENT4     = "#69F0AE"
 BLUE_LIGHT  = "#4FC3F7"
 BLUE_DARK   = "#0277BD"
 CARD_BG     = "#1E2130"
 BORDER      = "#2D3250"
 TEXT_MUTED  = "#8B93A7"
+BG_MAIN     = "#13151F"
 
-PLOTLY_TEMPLATE = "plotly_dark"
 PLOTLY_LAYOUT = dict(
-    template=PLOTLY_TEMPLATE,
+    template="plotly_dark",
     paper_bgcolor="rgba(0,0,0,0)",
     plot_bgcolor="rgba(0,0,0,0)",
     font=dict(family="DM Sans, sans-serif", color="#CDD6F4"),
@@ -48,294 +38,105 @@ PLOTLY_LAYOUT = dict(
     legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
 )
 
+MESES_FULL = {1:"Enero",2:"Febrero",3:"Marzo",4:"Abril",5:"Mayo",6:"Junio",
+              7:"Julio",8:"Agosto",9:"Septiembre",10:"Octubre",11:"Noviembre",12:"Diciembre"}
+
 st.markdown(f"""
 <style>
   @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=DM+Mono:wght@400;500&display=swap');
-
-  html, body, [class*="css"] {{
-      font-family: 'DM Sans', sans-serif;
-  }}
+  html, body, [class*="css"] {{ font-family: 'DM Sans', sans-serif; }}
   #MainMenu, footer, header {{ visibility: hidden; }}
-
-  /* ── Fondo general ── */
-  .stApp {{ background-color: #13151F; }}
-
-  /* ── Sidebar ── */
+  .stApp {{ background-color: {BG_MAIN}; }}
   [data-testid="stSidebar"] {{
-      background-color: #171925 !important;
-      border-right: 1px solid {BORDER};
+      background-color: #171925 !important; border-right: 1px solid {BORDER};
   }}
-  [data-testid="stSidebar"] .stSelectbox label,
-  [data-testid="stSidebar"] .stMultiSelect label,
-  [data-testid="stSidebar"] .stRadio label {{
-      font-size: 11px;
-      font-weight: 600;
-      letter-spacing: 0.08em;
-      text-transform: uppercase;
-      color: {TEXT_MUTED} !important;
+  [data-testid="stSidebar"] label {{
+      font-size: 11px; font-weight: 600; letter-spacing: 0.08em;
+      text-transform: uppercase; color: {TEXT_MUTED} !important;
   }}
-
-  /* ── Tarjetas KPI ── */
   .kpi-card {{
-      background: {CARD_BG};
-      border: 1px solid {BORDER};
-      border-radius: 12px;
-      padding: 18px 20px;
-      position: relative;
-      overflow: hidden;
+      background: {CARD_BG}; border: 1px solid {BORDER}; border-radius: 12px;
+      padding: 18px 20px; position: relative; overflow: hidden;
   }}
   .kpi-card::before {{
-      content: '';
-      position: absolute;
-      top: 0; left: 0; right: 0;
-      height: 3px;
+      content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px;
       background: linear-gradient(90deg, {ACCENT}, {BLUE_LIGHT});
   }}
+  .kpi-card-danger::before  {{ background: linear-gradient(90deg, {ACCENT2}, #FF3333); }}
+  .kpi-card-warning::before {{ background: linear-gradient(90deg, {ACCENT3}, #FF8F00); }}
+  .kpi-card-success::before {{ background: linear-gradient(90deg, {ACCENT4}, {ACCENT}); }}
+  .kpi-card-info::before    {{ background: linear-gradient(90deg, {BLUE_LIGHT}, {BLUE_DARK}); }}
   .kpi-label {{
-      font-size: 11px;
-      font-weight: 600;
-      letter-spacing: 0.1em;
-      text-transform: uppercase;
-      color: {TEXT_MUTED};
-      margin-bottom: 6px;
+      font-size: 11px; font-weight: 600; letter-spacing: 0.1em;
+      text-transform: uppercase; color: {TEXT_MUTED}; margin-bottom: 6px;
   }}
   .kpi-value {{
-      font-size: 32px;
-      font-weight: 700;
-      color: #CDD6F4;
-      font-family: 'DM Mono', monospace;
-      line-height: 1;
+      font-size: 26px; font-weight: 700; color: #CDD6F4;
+      font-family: 'DM Mono', monospace; line-height: 1;
   }}
-  .kpi-delta-pos {{
-      font-size: 13px;
-      font-weight: 500;
-      color: {ACCENT};
-      margin-top: 6px;
-  }}
-  .kpi-delta-neg {{
-      font-size: 13px;
-      font-weight: 500;
-      color: {ACCENT2};
-      margin-top: 6px;
-  }}
-  .kpi-delta-neu {{
-      font-size: 13px;
-      font-weight: 500;
-      color: {ACCENT3};
-      margin-top: 6px;
-  }}
-
-  /* ── Tabs ── */
-  .stTabs [data-baseweb="tab-list"] {{
-      background: {CARD_BG};
-      border-radius: 8px;
-      padding: 4px;
-      gap: 4px;
-      border: 1px solid {BORDER};
-  }}
-  .stTabs [data-baseweb="tab"] {{
-      border-radius: 6px;
-      font-size: 13px;
-      font-weight: 500;
-      color: {TEXT_MUTED};
-  }}
-  .stTabs [aria-selected="true"] {{
-      background-color: {ACCENT} !important;
-      color: #13151F !important;
-      font-weight: 700;
-  }}
-
-  /* ── Dataframe ── */
-  [data-testid="stDataFrame"] {{ border-radius: 10px; overflow: hidden; }}
-
-  /* ── Dividers ── */
-  hr {{ border-color: {BORDER} !important; opacity: 0.5; }}
-
-  /* ── Títulos de sección ── */
-  .section-header {{
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      margin-bottom: 4px;
-  }}
-  .section-title {{
-      font-size: 22px;
-      font-weight: 700;
-      color: #CDD6F4;
-  }}
-  .section-subtitle {{
-      font-size: 13px;
-      color: {TEXT_MUTED};
-      margin-bottom: 20px;
-  }}
-
-  /* ── Badge de período ── */
+  .kpi-delta-pos {{ font-size: 12px; color: {ACCENT4}; margin-top: 5px; font-weight:500; }}
+  .kpi-delta-neg {{ font-size: 12px; color: {ACCENT2}; margin-top: 5px; font-weight:500; }}
+  .kpi-delta-neu {{ font-size: 12px; color: {ACCENT3}; margin-top: 5px; font-weight:500; }}
+  .sec-title {{ font-size: 20px; font-weight: 700; color: #CDD6F4; margin-bottom: 4px; }}
+  .sec-sub   {{ font-size: 13px; color: {TEXT_MUTED}; margin-bottom: 16px; }}
   .badge {{
-      display: inline-block;
-      background: rgba(0,191,165,0.15);
-      color: {ACCENT};
-      border: 1px solid rgba(0,191,165,0.3);
-      border-radius: 20px;
-      padding: 2px 10px;
-      font-size: 12px;
-      font-weight: 600;
+      display: inline-block; background: rgba(0,191,165,0.15); color: {ACCENT};
+      border: 1px solid rgba(0,191,165,0.3); border-radius: 20px;
+      padding: 2px 10px; font-size: 12px; font-weight: 600;
   }}
-
-  /* ── Expander ── */
-  [data-testid="stExpander"] {{
-      background: {CARD_BG};
-      border: 1px solid {BORDER} !important;
-      border-radius: 10px;
+  .badge-proj {{
+      background: rgba(255,183,77,0.15); color: {ACCENT3}; border-color: rgba(255,183,77,0.3);
   }}
-
-  /* ── Métricas nativas (fallback) ── */
-  div[data-testid="stMetric"] {{
-      background-color: {CARD_BG};
-      border: 1px solid {BORDER};
-      padding: 14px 18px;
-      border-radius: 12px;
+  .insight-box {{
+      background: rgba(255,107,107,0.08); border: 1px solid rgba(255,107,107,0.25);
+      border-left: 4px solid {ACCENT2}; border-radius: 8px;
+      padding: 12px 16px; margin: 12px 0; font-size: 13px; color: #CDD6F4;
   }}
-
-  /* ── KPI alerta (SLA bajo meta) ── */
-  .kpi-card-alert {{
-      background: {CARD_BG};
-      border: 1px solid {ACCENT2} !important;
-      border-radius: 12px;
-      padding: 18px 20px;
-      position: relative;
-      overflow: hidden;
-      animation: pulse-border 2s ease-in-out infinite;
+  .insight-box-teal  {{ background:rgba(0,191,165,0.08);  border-color:rgba(0,191,165,0.25);  border-left-color:{ACCENT}; }}
+  .insight-box-amber {{ background:rgba(255,183,77,0.08); border-color:rgba(255,183,77,0.25); border-left-color:{ACCENT3}; }}
+  .insight-box-blue  {{ background:rgba(79,195,247,0.08); border-color:rgba(79,195,247,0.25); border-left-color:{BLUE_LIGHT}; }}
+  .stTabs [data-baseweb="tab-list"] {{
+      background: {CARD_BG}; border-radius: 8px; padding: 4px; gap: 4px; border: 1px solid {BORDER};
   }}
-  .kpi-card-alert::before {{
-      content: '';
-      position: absolute;
-      top: 0; left: 0; right: 0;
-      height: 3px;
-      background: linear-gradient(90deg, {ACCENT2}, #FF3333);
-  }}
-  @keyframes pulse-border {{
-      0%, 100% {{ box-shadow: 0 0 0 0 rgba(255,107,107,0); }}
-      50%       {{ box-shadow: 0 0 8px 2px rgba(255,107,107,0.25); }}
-  }}
-  .kpi-alert-msg {{
-      font-size: 11px;
-      color: {ACCENT2};
-      font-weight: 700;
-      margin-top: 5px;
-  }}
+  .stTabs [data-baseweb="tab"] {{ border-radius: 6px; font-size: 13px; font-weight: 500; color: {TEXT_MUTED}; }}
+  .stTabs [aria-selected="true"] {{ background-color: {ACCENT} !important; color: #13151F !important; font-weight: 700; }}
+  hr {{ border-color: {BORDER} !important; opacity: 0.5; }}
+  [data-testid="stExpander"] {{ background: {CARD_BG}; border: 1px solid {BORDER} !important; border-radius: 10px; }}
+  div[data-testid="stMetric"] {{ background-color:{CARD_BG}; border:1px solid {BORDER}; padding:14px 18px; border-radius:12px; }}
 </style>
 """, unsafe_allow_html=True)
 
 # ============================================================
 # HELPERS
 # ============================================================
-MESES = {1:"Ene",2:"Feb",3:"Mar",4:"Abr",5:"May",6:"Jun",
-         7:"Jul",8:"Ago",9:"Sep",10:"Oct",11:"Nov",12:"Dic"}
-MESES_FULL = {1:"Enero",2:"Febrero",3:"Marzo",4:"Abril",5:"Mayo",6:"Junio",
-              7:"Julio",8:"Agosto",9:"Septiembre",10:"Octubre",11:"Noviembre",12:"Diciembre"}
+def fmt_pesos(n):
+    s = f"{abs(n):,.0f}".replace(",","X").replace(".","," ).replace("X",".")
+    return f"$ {s}" if n >= 0 else f"- $ {s}"
 
-def fmt_fecha(fecha):
-    return f"{MESES_FULL[fecha.month]} {fecha.year}"
+def fmt_millones(n):
+    if abs(n) >= 1_000_000_000: return f"$ {n/1e9:.1f}B"
+    if abs(n) >= 1_000_000:     return f"$ {n/1e6:.1f}M"
+    return fmt_pesos(n)
 
-def fmt_num(n, decimals=0):
-    return f"{n:,.{decimals}f}".replace(",", "X").replace(".", ",").replace("X", ".")
+def fmt_fecha(ts):
+    return f"{MESES_FULL[ts.month]} {ts.year}"
 
-def kpi_card(label, value, delta=None, delta_pct=None, prefix="", suffix="", alert=False):
-    """Renderiza una tarjeta KPI custom con HTML. alert=True activa borde rojo."""
-    val_str = f"{prefix}{fmt_num(value)}{suffix}"
+def kpi_card(label, value, delta=None, delta_label=None, variant="default", fmt_fn=fmt_pesos):
+    val_str = fmt_fn(value)
     delta_html = ""
     if delta is not None:
-        sign  = "+" if delta >= 0 else ""
-        cls   = "kpi-delta-pos" if delta > 0 else ("kpi-delta-neg" if delta < 0 else "kpi-delta-neu")
-        icon  = "▲" if delta > 0 else ("▼" if delta < 0 else "●")
-        pct_s = f" ({sign}{delta_pct:.1f}%)" if delta_pct is not None else ""
-        delta_html = f'<div class="{cls}">{icon} {sign}{fmt_num(delta)}{suffix}{pct_s}</div>'
-    alert_html = '<div class="kpi-alert-msg">⚠️ Por debajo de la meta (90%)</div>' if alert else ""
-    card_class = "kpi-card-alert" if alert else "kpi-card"
+        sign = "+" if delta >= 0 else ""
+        cls  = "kpi-delta-pos" if delta > 0 else ("kpi-delta-neg" if delta < 0 else "kpi-delta-neu")
+        icon = "▲" if delta > 0 else ("▼" if delta < 0 else "●")
+        lbl  = delta_label if delta_label else f"{sign}{fmt_fn(delta)}"
+        delta_html = f'<div class="{cls}">{icon} {lbl}</div>'
+    card_cls = f"kpi-card kpi-card-{variant}" if variant != "default" else "kpi-card"
     return f"""
-    <div class="{card_class}">
+    <div class="{card_cls}">
         <div class="kpi-label">{label}</div>
         <div class="kpi-value">{val_str}</div>
         {delta_html}
-        {alert_html}
-    </div>
-    """
-
-# ============================================================
-# HELPERS — EXPORTACIÓN
-# ============================================================
-def generar_excel(df: pd.DataFrame, nombre_hoja: str = "Datos") -> bytes:
-    buf = io.BytesIO()
-    with pd.ExcelWriter(buf, engine="openpyxl") as writer:
-        df.to_excel(writer, sheet_name=nombre_hoja, index=True)
-    return buf.getvalue()
-
-def generar_pdf(df: pd.DataFrame, titulo: str = "Reporte CEMIC") -> bytes:
-    if not PDF_OK:
-        return b""
-    buf = io.BytesIO()
-    doc = SimpleDocTemplate(buf, pagesize=landscape(A4),
-                            leftMargin=20, rightMargin=20,
-                            topMargin=30, bottomMargin=20)
-    styles = getSampleStyleSheet()
-    elements = []
-
-    # Título
-    elements.append(Paragraph(titulo, styles['Title']))
-    elements.append(Spacer(1, 12))
-
-    # Reset index para incluirlo como columna
-    df_reset = df.reset_index()
-    data = [list(df_reset.columns)] + df_reset.astype(str).values.tolist()
-
-    t = Table(data, repeatRows=1)
-    t.setStyle(TableStyle([
-        ('BACKGROUND', (0,0), (-1,0), rl_colors.HexColor('#1E2130')),
-        ('TEXTCOLOR',  (0,0), (-1,0), rl_colors.white),
-        ('FONTNAME',   (0,0), (-1,0), 'Helvetica-Bold'),
-        ('FONTSIZE',   (0,0), (-1,-1), 7),
-        ('ROWBACKGROUNDS', (0,1), (-1,-1),
-         [rl_colors.HexColor('#13151F'), rl_colors.HexColor('#1A1D2E')]),
-        ('TEXTCOLOR',  (0,1), (-1,-1), rl_colors.HexColor('#CDD6F4')),
-        ('GRID',       (0,0), (-1,-1), 0.3, rl_colors.HexColor('#2D3250')),
-        ('ALIGN',      (1,1), (-1,-1), 'RIGHT'),
-        ('TOPPADDING', (0,0), (-1,-1), 4),
-        ('BOTTOMPADDING', (0,0), (-1,-1), 4),
-    ]))
-    elements.append(t)
-    doc.build(elements)
-    return buf.getvalue()
-
-def botones_exportacion(df: pd.DataFrame, nombre_archivo: str, titulo_pdf: str):
-    """Renderiza los botones de descarga Excel y PDF lado a lado."""
-    col_xl, col_pdf, _ = st.columns([1, 1, 4])
-    excel_bytes = generar_excel(df, nombre_archivo[:31])
-    col_xl.download_button(
-        label="⬇️ Excel",
-        data=excel_bytes,
-        file_name=f"{nombre_archivo}.xlsx",
-        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        use_container_width=True,
-    )
-    if PDF_OK:
-        pdf_bytes = generar_pdf(df, titulo_pdf)
-        col_pdf.download_button(
-            label="⬇️ PDF",
-            data=pdf_bytes,
-            file_name=f"{nombre_archivo}.pdf",
-            mime="application/pdf",
-            use_container_width=True,
-        )
-    else:
-        col_pdf.caption("PDF: instalar reportlab")
-
-# ============================================================
-# SESSION STATE — Filtro cruzado entre módulos
-# ============================================================
-if 'cross_servicio' not in st.session_state:
-    st.session_state['cross_servicio'] = []
-if 'cross_depto' not in st.session_state:
-    st.session_state['cross_depto'] = []
+    </div>"""
 
 def apply_plotly_defaults(fig, title=""):
     fig.update_layout(**PLOTLY_LAYOUT)
@@ -345,777 +146,532 @@ def apply_plotly_defaults(fig, title=""):
     fig.update_yaxes(showgrid=True, gridcolor=BORDER, zeroline=False)
     return fig
 
+def generar_excel(df, nombre_hoja="Datos"):
+    buf = io.BytesIO()
+    with pd.ExcelWriter(buf, engine="openpyxl") as writer:
+        df.to_excel(writer, sheet_name=nombre_hoja[:31], index=False)
+    return buf.getvalue()
+
+def limpiar_df(df):
+    num_cols = df.select_dtypes(include='number').columns
+    df[num_cols] = df[num_cols].fillna(0)
+    str_cols = df.select_dtypes(include='object').columns
+    df[str_cols] = df[str_cols].fillna('')
+    return df
+
 # ============================================================
-# SIDEBAR — NAVEGACIÓN
+# CARGA DE DATOS
+# ============================================================
+@st.cache_data(ttl=300)
+def cargar_datos():
+    BASE = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQHFwl-Dxn-Rw9KN_evkCMk2Er8lQqgZMzAtN4LuEkWcCeBVUNwgb8xeIFKvpyxMgeGTeJ3oEWKpMZj"
+    df_of  = pd.read_csv(f"{BASE}/pub?gid=1524527213&single=true&output=csv")
+    df_au  = pd.read_csv(f"{BASE}/pub?gid=2132722842&single=true&output=csv")
+    df_val = pd.read_csv(f"{BASE}/pub?gid=554651129&single=true&output=csv")
+
+    # BD_TURNOS_DADOS — reemplazá TURNOS_DADOS_GID con el gid real de tu hoja
+    try:
+        df_td = pd.read_csv(f"{BASE}/pub?gid=TURNOS_DADOS_GID&single=true&output=csv")
+    except Exception:
+        df_td = pd.DataFrame(columns=['PERIODO','SERVICIO','TURNO_DADOS'])
+
+    for df in [df_of, df_au, df_val, df_td]:
+        df.columns = df.columns.str.strip()
+        for col in ['SERVICIO','DEPARTAMENTO']:
+            if col in df.columns:
+                df[col] = df[col].astype(str).str.strip().str.upper()
+
+    df_of['PERIODO']      = pd.to_datetime(df_of['PERIODO'],      dayfirst=True, errors='coerce')
+    df_au['FECHA_INICIO'] = pd.to_datetime(df_au['FECHA_INICIO'], dayfirst=True, errors='coerce')
+    df_val['PERIODO']     = pd.to_datetime(df_val['PERIODO'],     dayfirst=True, errors='coerce')
+    if 'PERIODO' in df_td.columns:
+        df_td['PERIODO']  = pd.to_datetime(df_td['PERIODO'],      dayfirst=True, errors='coerce')
+
+    if 'VALOR_TURNO' in df_val.columns:
+        df_val['VALOR_TURNO'] = pd.to_numeric(
+            df_val['VALOR_TURNO'].astype(str)
+                .str.replace('$','',regex=False)
+                .str.replace('.','',regex=False)
+                .str.replace(',','.',regex=False),
+            errors='coerce').fillna(0)
+    if 'RENDIMIENTO' in df_val.columns:
+        df_val['RENDIMIENTO'] = pd.to_numeric(df_val['RENDIMIENTO'], errors='coerce').fillna(14)
+    if 'TURNO_DADOS' in df_td.columns:
+        df_td['TURNO_DADOS'] = pd.to_numeric(df_td['TURNO_DADOS'], errors='coerce').fillna(0)
+
+    col_target = 'CONSULTORIOS_REALES' if 'CONSULTORIOS_REALES' in df_au.columns else 'DIAS_CAIDOS'
+    df_au[col_target] = pd.to_numeric(df_au[col_target], errors='coerce').fillna(0)
+    df_au['_COL_TARGET'] = df_au[col_target]
+
+    for df in [df_of, df_au, df_val, df_td]:
+        limpiar_df(df)
+
+    return df_of, df_au, df_val, df_td
+
+# ============================================================
+# CÁLCULO CENTRAL
+# ============================================================
+def calcular_metricas(df_of, df_au, df_val, df_td_p=None, rend_override=None):
+    # Facturación base (oferta × valor)
+    df_ing = df_of.merge(df_val[['SERVICIO','VALOR_TURNO']], on='SERVICIO', how='left')
+    df_ing['VALOR_TURNO']      = df_ing['VALOR_TURNO'].fillna(0)
+    df_ing['FACTURACION_BASE'] = df_ing['TURNOS_MENSUAL'] * df_ing['VALOR_TURNO']
+
+    # Pérdida por ausentismo profesional
+    df_perd = df_au.merge(df_val[['SERVICIO','VALOR_TURNO','RENDIMIENTO']], on='SERVICIO', how='left')
+    df_perd['VALOR_TURNO']       = df_perd['VALOR_TURNO'].fillna(0)
+    df_perd['RENDIMIENTO_USADO'] = rend_override if rend_override else df_perd['RENDIMIENTO'].fillna(14)
+    df_perd['TURNOS_PERDIDOS']   = df_perd['_COL_TARGET'] * df_perd['RENDIMIENTO_USADO']
+    df_perd['DINERO_PERDIDO']    = df_perd['TURNOS_PERDIDOS'] * df_perd['VALOR_TURNO']
+
+    total_base  = df_ing['FACTURACION_BASE'].sum()
+    total_perd  = df_perd['DINERO_PERDIDO'].sum()
+    turnos_of   = df_ing['TURNOS_MENSUAL'].sum()
+    turnos_perd = df_perd['TURNOS_PERDIDOS'].sum()
+    pct_fuga    = (total_perd / (total_base + total_perd) * 100) if (total_base + total_perd) > 0 else 0
+
+    # Ocupación real (solo si hay dato de turnos dados)
+    ocup = pd.DataFrame()
+    tiene_dato_real = False
+    if df_td_p is not None and not df_td_p.empty:
+        of_serv = df_ing.groupby('SERVICIO').agg(
+            TURNOS_OFERTA=('TURNOS_MENSUAL','sum'),
+            VALOR_TURNO=('VALOR_TURNO','mean')
+        ).reset_index()
+        ocup = of_serv.merge(df_td_p[['SERVICIO','TURNO_DADOS']], on='SERVICIO', how='inner')
+        ocup = ocup[(ocup['VALOR_TURNO'] > 0) & (ocup['TURNOS_OFERTA'] > 0)]
+        ocup['TASA_OCUP']         = (ocup['TURNO_DADOS'] / ocup['TURNOS_OFERTA'] * 100).round(1)
+        ocup['FACT_REAL']         = ocup['TURNO_DADOS'] * ocup['VALOR_TURNO']
+        ocup['PERD_INASISTENCIA'] = (ocup['TURNOS_OFERTA'] - ocup['TURNO_DADOS']).clip(lower=0) * ocup['VALOR_TURNO']
+        tiene_dato_real = not ocup.empty
+
+    return dict(
+        total_base=total_base, total_perd=total_perd,
+        total_pot=total_base + total_perd,
+        total_fact_real=ocup['FACT_REAL'].sum() if tiene_dato_real else None,
+        total_perd_inasist=ocup['PERD_INASISTENCIA'].sum() if tiene_dato_real else None,
+        tasa_ocup_prom=ocup['TASA_OCUP'].clip(upper=100).mean() if tiene_dato_real else None,
+        tiene_dato_real=tiene_dato_real,
+        turnos_of=turnos_of, turnos_perd=turnos_perd, pct_fuga=pct_fuga,
+        df_ing=df_ing, df_perd=df_perd, df_ocup=ocup,
+    )
+
+# ============================================================
+# CARGA INICIAL
+# ============================================================
+try:
+    df_oferta, df_ausencia, df_valores, df_turnos_dados = cargar_datos()
+except Exception as e:
+    st.error(f"❌ Error cargando datos: {e}")
+    st.stop()
+
+tiene_td       = not df_turnos_dados.empty and 'TURNO_DADOS' in df_turnos_dados.columns
+periodos_reales = set(df_turnos_dados['PERIODO'].dropna().unique()) if tiene_td else set()
+
+# ============================================================
+# SIDEBAR
 # ============================================================
 with st.sidebar:
     st.markdown(f"""
-    <div style="text-align:center; padding: 10px 0 20px 0;">
-        <img src="https://cemic.edu.ar/assets/img/logo/logo-cemic.png" width="130"
-             style="filter: brightness(1.1);">
-        <div style="font-size:10px; letter-spacing:0.15em; color:{TEXT_MUTED};
-                    text-transform:uppercase; margin-top:8px; font-weight:600;">
-            Tablero de Gestión
+    <div style="text-align:center; padding:10px 0 20px 0;">
+        <img src="https://cemic.edu.ar/assets/img/logo/logo-cemic.png" width="120" style="filter:brightness(1.1);">
+        <div style="font-size:10px; letter-spacing:0.15em; color:{TEXT_MUTED}; text-transform:uppercase; margin-top:8px; font-weight:600;">
+            Simulador Financiero
         </div>
     </div>
     """, unsafe_allow_html=True)
 
-    app_mode = st.selectbox(
-        "MÓDULO",
-        ["🏥  Oferta de Turnos", "🎧  Call Center", "📉  Ausentismo"],
-        label_visibility="collapsed"
-    )
+    fechas_disp = sorted(df_valores['PERIODO'].dropna().unique())
+    if not fechas_disp:
+        st.error("Sin períodos disponibles.")
+        st.stop()
+
+    periodo_sel  = st.selectbox("PERÍODO", fechas_disp, index=len(fechas_disp)-1, format_func=fmt_fecha)
+    es_dato_real = pd.Timestamp(periodo_sel) in periodos_reales
+
+    if tiene_td:
+        badge_txt = "✅ Dato real disponible" if es_dato_real else "📈 Sin dato real — modo estimación"
+        badge_cls = "badge" if es_dato_real else "badge badge-proj"
+        st.markdown(f'<div class="{badge_cls}" style="margin-bottom:8px;">{badge_txt}</div>', unsafe_allow_html=True)
+
+    st.markdown("<hr>", unsafe_allow_html=True)
+    st.markdown(f"<div style='font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:{TEXT_MUTED};margin-bottom:8px;'>PARÁMETROS</div>", unsafe_allow_html=True)
+    usar_slider = st.checkbox("Ajustar rendimiento manualmente", value=False)
+    rend_manual = 14
+    if usar_slider:
+        rend_manual = st.slider("Pacientes por consultorio:", 1, 30, 14)
+        st.caption(f"Ajustado: **{rend_manual}** pac/cons")
+
+    st.markdown("<hr>", unsafe_allow_html=True)
+    st.markdown(f"<div style='font-size:11px;color:{TEXT_MUTED};'>Datos actualizados cada 5 min.</div>", unsafe_allow_html=True)
+
+# ============================================================
+# HELPERS DE FILTRADO
+# ============================================================
+def filtrar(p):
+    dv = df_valores[df_valores['PERIODO'] == p]
+    do = df_oferta[(df_oferta['PERIODO'].dt.year==p.year)  & (df_oferta['PERIODO'].dt.month==p.month)]
+    da = df_ausencia[(df_ausencia['FECHA_INICIO'].dt.year==p.year) & (df_ausencia['FECHA_INICIO'].dt.month==p.month)]
+    dt = df_turnos_dados[df_turnos_dados['PERIODO']==p] if tiene_td else None
+    return do, da, dv, dt
+
+df_of_f, df_au_f, df_val_f, df_td_f = filtrar(periodo_sel)
+
+idx_ant    = fechas_disp.index(periodo_sel) - 1 if fechas_disp.index(periodo_sel) > 0 else None
+periodo_ant = fechas_disp[idx_ant] if idx_ant is not None else None
+
+# Tasa de ocupación promedio histórica (para estimación en períodos sin dato)
+tasa_hist_prom = None
+if tiene_td and periodos_reales:
+    tasas = []
+    for p in sorted(periodos_reales):
+        try:
+            do, da, dv, dt = filtrar(p)
+            mh = calcular_metricas(do, da, dv, dt)
+            if mh['tasa_ocup_prom'] and not np.isnan(mh['tasa_ocup_prom']):
+                tasas.append(mh['tasa_ocup_prom'])
+        except:
+            pass
+    tasa_hist_prom = float(np.mean(tasas)) if tasas else None
+
+# ============================================================
+# MAIN
+# ============================================================
+try:
+    m = calcular_metricas(df_of_f, df_au_f, df_val_f,
+                          df_td_f if es_dato_real else None,
+                          rend_override=rend_manual if usar_slider else None)
+
+    m_ant = None
+    if periodo_ant is not None:
+        try:
+            ant_real = pd.Timestamp(periodo_ant) in periodos_reales
+            do_a, da_a, dv_a, dt_a = filtrar(periodo_ant)
+            m_ant = calcular_metricas(do_a, da_a, dv_a, dt_a if ant_real else None)
+        except:
+            m_ant = None
+
+    # ── Encabezado ─────────────────────────────────────────
+    badge_per = "✅ Dato real" if es_dato_real else "📈 Estimado"
+    badge_cls = "badge" if es_dato_real else "badge badge-proj"
+    vs_str    = f"&nbsp;&nbsp;vs&nbsp;&nbsp;<span style='color:{TEXT_MUTED};'>{fmt_fecha(periodo_ant)}</span>" if periodo_ant else ""
+    st.markdown(f"""
+    <div style="display:flex; align-items:baseline; gap:12px; margin-bottom:4px;">
+        <span style="font-size:26px; font-weight:700; color:#CDD6F4;">💰 Simulador de Impacto Económico</span>
+    </div>
+    <div style="font-size:13px; color:{TEXT_MUTED}; margin-bottom:20px;">
+        Período analizado · <span class="badge">{fmt_fecha(periodo_sel)}</span>
+        {vs_str}&nbsp;&nbsp;<span class="{badge_cls}">{badge_per}</span>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # ── KPIs ───────────────────────────────────────────────
+    d_base = (m['total_base'] - m_ant['total_base']) if m_ant else None
+    d_perd = (m['total_perd'] - m_ant['total_perd']) if m_ant else None
+
+    c1, c2, c3, c4 = st.columns(4)
+
+    c1.markdown(kpi_card(
+        "💰 Facturación Base (Oferta)", m['total_base'],
+        delta=d_base,
+        delta_label=f"{'+' if d_base and d_base>=0 else ''}{fmt_millones(d_base) if d_base else ''} vs {fmt_fecha(periodo_ant) if periodo_ant else ''}",
+        variant="success"
+    ), unsafe_allow_html=True)
+    c1.caption(f"{m['turnos_of']:,.0f} turnos ofertados")
+
+    c2.markdown(kpi_card(
+        "💸 Pérdida por Ausentismo Prof.", m['total_perd'],
+        delta=d_perd,
+        delta_label=f"{'+' if d_perd and d_perd>=0 else ''}{fmt_millones(d_perd) if d_perd else ''} vs {fmt_fecha(periodo_ant) if periodo_ant else ''}",
+        variant="danger"
+    ), unsafe_allow_html=True)
+    c2.caption(f"{m['turnos_perd']:,.0f} turnos cancelados · {m['pct_fuga']:.1f}% del potencial")
+
+    if m['tiene_dato_real']:
+        d_real = (m['total_fact_real'] - m_ant['total_fact_real']) if (m_ant and m_ant.get('total_fact_real')) else None
+        c3.markdown(kpi_card(
+            "✅ Facturación Real", m['total_fact_real'],
+            delta=d_real,
+            delta_label=f"{'+' if d_real and d_real>=0 else ''}{fmt_millones(d_real) if d_real else ''} vs {fmt_fecha(periodo_ant) if periodo_ant else ''}",
+            variant="success"
+        ), unsafe_allow_html=True)
+        c3.caption(f"Tasa de ocupación promedio: {m['tasa_ocup_prom']:.1f}%")
+
+        c4.markdown(kpi_card(
+            "👤 Pérdida por Inasistencia Paciente", m['total_perd_inasist'], variant="danger"
+        ), unsafe_allow_html=True)
+        c4.caption("Turnos disponibles no utilizados por el paciente")
+    else:
+        c3.markdown(kpi_card("🚀 Potencial Total", m['total_pot'], variant="default"), unsafe_allow_html=True)
+        c3.caption("Escenario ideal sin ausentismo")
+        c4.markdown(kpi_card("📅 Proyección Anual Pérdida", m['total_perd'] * 12, variant="warning"), unsafe_allow_html=True)
+        c4.caption("Si el ausentismo de este mes se mantiene 12 meses")
+
+        if tasa_hist_prom:
+            fact_est = m['total_base'] * tasa_hist_prom / 100
+            st.markdown(f"""
+            <div class="insight-box insight-box-amber" style="margin-top:12px;">
+                📈 <b>Estimación:</b> Basado en los meses anteriores, la tasa de ocupación promedio es
+                <b>{tasa_hist_prom:.1f}%</b>. La facturación real estimada para este período sería
+                <b>{fmt_millones(fact_est)}</b> — cargá los turnos dados para ver el dato exacto.
+            </div>
+            """, unsafe_allow_html=True)
+
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    # ── Waterfall ──────────────────────────────────────────
+    st.markdown('<div class="sec-title">📊 Composición Financiera del Período</div>', unsafe_allow_html=True)
+
+    if m['tiene_dato_real']:
+        st.markdown(f'<div class="sec-sub">Del potencial total, desglose de pérdidas por causa y facturación real · <span class="badge">✅ Dato real</span></div>', unsafe_allow_html=True)
+        wf_x = ["Potencial\nTotal","Ausentismo\nProfesional","Inasistencia\nPaciente","Facturación\nReal"]
+        wf_y = [m['total_pot'], -m['total_perd'], -m['total_perd_inasist'], 0]
+        wf_t = [fmt_millones(m['total_pot']), f"- {fmt_millones(m['total_perd'])}",
+                f"- {fmt_millones(m['total_perd_inasist'])}", fmt_millones(m['total_fact_real'])]
+        wf_m = ["absolute","relative","relative","total"]
+    else:
+        st.markdown(f'<div class="sec-sub">Del potencial total, pérdida por ausentismo · <span class="badge badge-proj">📈 Estimado — cargá turnos dados para mayor precisión</span></div>', unsafe_allow_html=True)
+        wf_x = ["Potencial\nTotal","Pérdida\nAusentismo","Facturación\nBase"]
+        wf_y = [m['total_pot'], -m['total_perd'], 0]
+        wf_t = [fmt_millones(m['total_pot']), f"- {fmt_millones(m['total_perd'])}", fmt_millones(m['total_base'])]
+        wf_m = ["absolute","relative","total"]
+
+    fig_wf = go.Figure(go.Waterfall(
+        name="", orientation="v", measure=wf_m, x=wf_x, y=wf_y, text=wf_t,
+        textposition="outside",
+        connector=dict(line=dict(color=BORDER, width=1, dash="dot")),
+        increasing=dict(marker=dict(color=BLUE_LIGHT)),
+        decreasing=dict(marker=dict(color=ACCENT2, line=dict(color=ACCENT2, width=0))),
+        totals=dict(marker=dict(color=ACCENT4, line=dict(color=ACCENT4, width=0))),
+        textfont=dict(size=13, color="#CDD6F4"),
+    ))
+    apply_plotly_defaults(fig_wf)
+    fig_wf.update_layout(height=360, showlegend=False, yaxis=dict(tickformat="$.3s"))
+    st.plotly_chart(fig_wf, use_container_width=True)
+
     st.markdown("<hr>", unsafe_allow_html=True)
 
-# Hint de reapertura cuando sidebar está colapsado
-st.markdown(f"""
-<div style="position:fixed; bottom:16px; left:16px; z-index:9999;
-            background:{ACCENT}; color:#13151F; border-radius:20px;
-            padding:6px 14px; font-size:12px; font-weight:700;
-            cursor:pointer; opacity:0.85;"
-     title="Presioná [ para abrir el menú">
-    ☰ Menú — presioná [
-</div>
-""", unsafe_allow_html=True)
-
-# ============================================================
-# APP 1: OFERTA DE TURNOS
-# ============================================================
-if app_mode == "🏥  Oferta de Turnos":
-
-    @st.cache_data(ttl=300)
-    def cargar_datos_oferta():
-        url = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQHFwl-Dxn-Rw9KN_evkCMk2Er8lQqgZMzAtN4LuEkWcCeBVUNwgb8xeIFKvpyxMgeGTeJ3oEWKpMZj/pub?gid=1524527213&single=true&output=csv"
-        df = pd.read_csv(url)
-        df.columns = df.columns.str.strip()
-        for col in ['SEDE','DEPARTAMENTO','SERVICIO']:
-            if col in df.columns:
-                df[col] = df[col].astype(str).str.strip().str.upper()
-        df['PERIODO'] = pd.to_datetime(df['PERIODO'], dayfirst=True, errors='coerce')
-        return df.dropna(subset=['PERIODO'])
-
-    try:
-        df = cargar_datos_oferta()
-
-        # ── Sidebar: controles ──────────────────────────────
-        with st.sidebar:
-            st.markdown(f"<div style='font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:{TEXT_MUTED};margin-bottom:8px;'>VISTA</div>", unsafe_allow_html=True)
-            modo = st.radio("", ["📊  Global", "🆚  Comparativa"], label_visibility="collapsed")
-
-            st.markdown("<br>", unsafe_allow_html=True)
-            fechas = sorted(df['PERIODO'].unique())
-
-            if "Global" in modo:
-                meses_sel = st.multiselect("PERÍODO", fechas, default=[fechas[-1]], format_func=fmt_fecha)
-                periodos_para_comparar = None
-            else:
-                st.markdown(f"<div style='font-size:11px;font-weight:700;color:{TEXT_MUTED};'>PERÍODOS A COMPARAR</div>", unsafe_allow_html=True)
-                meses_sel = st.multiselect(
-                    "Seleccioná hasta 4 períodos",
-                    fechas,
-                    default=fechas[-2:] if len(fechas) >= 2 else fechas,
-                    format_func=fmt_fecha,
-                    max_selections=4
-                )
-                periodos_para_comparar = meses_sel
-
-            st.markdown("<hr>", unsafe_allow_html=True)
-
-            with st.expander("🔍  Filtros"):
-                filtro_tipo = st.radio("Modalidad", ["Todos","AP","ANP"], horizontal=True)
-                depto = st.multiselect("Departamento", sorted(df['DEPARTAMENTO'].unique()),
-                                       default=st.session_state['cross_depto'] if st.session_state['cross_depto'] else [])
-                serv  = st.multiselect("Servicio",     sorted(df['SERVICIO'].unique()),
-                                       default=st.session_state['cross_servicio'] if st.session_state['cross_servicio'] else [])
-                sede  = st.multiselect("Sede",         sorted(df['SEDE'].unique()))
-                if 'PROFESIONAL/EQUIPO' in df.columns:
-                    prof = st.multiselect("Profesional", sorted(df['PROFESIONAL/EQUIPO'].astype(str).unique()))
-                else:
-                    prof = []
-                # Guardar selección para filtro cruzado
-                st.session_state['cross_servicio'] = serv
-                st.session_state['cross_depto']    = depto
-                if serv or depto:
-                    st.caption(f"🔗 Filtro activo · se aplicará en Ausentismo")
-
-            st.markdown("<hr>", unsafe_allow_html=True)
-
-            cols_txt = df.select_dtypes(include=['object']).columns.tolist()
-            cols_num = df.select_dtypes(include=['float','int']).columns.tolist()
-            default_fila = ['SERVICIO'] if 'SERVICIO' in cols_txt else [cols_txt[0]]
-            filas_sel = st.multiselect("AGRUPAR POR", cols_txt, default=default_fila)
-            val_sel   = st.multiselect("MÉTRICAS", cols_num,
-                                       default=['TURNOS_MENSUAL'] if 'TURNOS_MENSUAL' in cols_num else [cols_num[0]])
-
-        # ── Título ──────────────────────────────────────────
-        st.markdown('<div class="section-header"><span class="section-title">🏥 Oferta de Turnos de Consultorio</span></div>', unsafe_allow_html=True)
-
-        if not meses_sel or not filas_sel or not val_sel:
-            st.info("Seleccioná al menos un período, un agrupador y una métrica.")
-            st.stop()
-
-        # ── Filtrado ─────────────────────────────────────────
-        df_f = df[df['PERIODO'].isin(meses_sel)].copy()
-        if filtro_tipo == "AP"  and 'TIPO_ATENCION' in df_f.columns: df_f = df_f[df_f['TIPO_ATENCION']=='AP']
-        if filtro_tipo == "ANP" and 'TIPO_ATENCION' in df_f.columns: df_f = df_f[df_f['TIPO_ATENCION']=='ANP']
-        if depto: df_f = df_f[df_f['DEPARTAMENTO'].isin(depto)]
-        if serv:  df_f = df_f[df_f['SERVICIO'].isin(serv)]
-        if sede:  df_f = df_f[df_f['SEDE'].isin(sede)]
-        if prof and 'PROFESIONAL/EQUIPO' in df_f.columns:
-            df_f = df_f[df_f['PROFESIONAL/EQUIPO'].isin(prof)]
-
-        if df_f.empty:
-            st.warning("No hay datos para los filtros seleccionados.")
-            st.stop()
-
-        # ════════════════════════════════════════════════════
-        # VISTA GLOBAL
-        # ════════════════════════════════════════════════════
-        if "Global" in modo:
-            nombres = " · ".join([fmt_fecha(m) for m in sorted(meses_sel)])
-            st.markdown(f'<div class="section-subtitle">Vista global · <span class="badge">{nombres}</span> · Modalidad: {filtro_tipo}</div>', unsafe_allow_html=True)
-
-            # KPIs con delta vs período anterior al primero seleccionado
-            primer_mes = min(meses_sel)
-            idx_ant = fechas.index(primer_mes) - 1 if fechas.index(primer_mes) > 0 else None
-            df_ant = df[df['PERIODO'] == fechas[idx_ant]] if idx_ant is not None else None
-
-            cols_kpi = st.columns(len(val_sel))
-            for i, metrica in enumerate(val_sel):
-                val_actual = df_f[metrica].sum()
-                delta = delta_pct = None
-                if df_ant is not None and not df_ant.empty:
-                    val_prev = df_ant[metrica].sum()
-                    delta = val_actual - val_prev
-                    delta_pct = (delta / val_prev * 100) if val_prev > 0 else 0
-                label = metrica.replace("_"," ").title()
-                cols_kpi[i].markdown(kpi_card(label, val_actual, delta, delta_pct), unsafe_allow_html=True)
-
-            st.markdown("<br>", unsafe_allow_html=True)
-            tab_graf, tab_tabla, tab_trend = st.tabs(["📊  Gráfico", "📄  Tabla dinámica", "📈  Tendencia"])
-
-            with tab_graf:
-                agrup_col = filas_sel[0]
-                metrica_graf = val_sel[0]
-                df_agg = df_f.groupby(agrup_col)[metrica_graf].sum().reset_index().sort_values(metrica_graf, ascending=False)
-
-                fig = px.bar(
-                    df_agg, x=agrup_col, y=metrica_graf,
-                    text=metrica_graf,
-                    color=metrica_graf,
-                    color_continuous_scale=[[0, BLUE_DARK],[0.5, BLUE_LIGHT],[1, ACCENT]],
-                )
-                fig.update_traces(texttemplate='%{text:,.0f}', textposition='outside',
-                                  marker_line_width=0)
-                fig.update_coloraxes(showscale=False)
-                apply_plotly_defaults(fig, f"{metrica_graf.replace('_',' ').title()} por {agrup_col.title()}")
-                fig.update_layout(height=460, xaxis_tickangle=-50)
-                st.plotly_chart(fig, use_container_width=True)
-
-            with tab_tabla:
-                tabla = pd.pivot_table(df_f, index=filas_sel, values=val_sel,
-                                       aggfunc='sum', margins=True, margins_name='TOTAL')
-                st.dataframe(
-                    tabla.style.format("{:,.0f}").background_gradient(cmap='Blues'),
-                    use_container_width=True
-                )
-                st.markdown("<br>", unsafe_allow_html=True)
-                botones_exportacion(
-                    tabla,
-                    nombre_archivo=f"turnos_{'-'.join([fmt_fecha(m).replace(' ','_') for m in sorted(meses_sel)])}",
-                    titulo_pdf=f"Oferta de Turnos — {nombres}"
-                )
-
-            with tab_trend:
-                # ── Proyección de tendencia lineal ──────────────
-                metrica_t = val_sel[0]
-                # Serie histórica completa (sin filtro de período)
-                df_hist = df.copy()
-                if filtro_tipo == "AP"  and 'TIPO_ATENCION' in df_hist.columns: df_hist = df_hist[df_hist['TIPO_ATENCION']=='AP']
-                if filtro_tipo == "ANP" and 'TIPO_ATENCION' in df_hist.columns: df_hist = df_hist[df_hist['TIPO_ATENCION']=='ANP']
-                if depto: df_hist = df_hist[df_hist['DEPARTAMENTO'].isin(depto)]
-                if serv:  df_hist = df_hist[df_hist['SERVICIO'].isin(serv)]
-
-                serie = df_hist.groupby('PERIODO')[metrica_t].sum().reset_index().sort_values('PERIODO')
-
-                if len(serie) < 3:
-                    st.info("Se necesitan al menos 3 períodos históricos para calcular la tendencia.")
-                else:
-                    # Regresión lineal con numpy
-                    x = np.arange(len(serie))
-                    y = serie[metrica_t].values
-                    coef = np.polyfit(x, y, 1)
-                    poly = np.poly1d(coef)
-
-                    # Proyectar 3 meses hacia adelante
-                    N_PROJ = 3
-                    ultimo_mes = serie['PERIODO'].max()
-                    fechas_proj = [ultimo_mes + pd.DateOffset(months=i+1) for i in range(N_PROJ)]
-                    x_proj = np.arange(len(serie), len(serie) + N_PROJ)
-                    y_proj = poly(x_proj)
-
-                    fig_t = go.Figure()
-                    # Línea histórica real
-                    fig_t.add_trace(go.Scatter(
-                        x=serie['PERIODO'], y=serie[metrica_t],
-                        name='Histórico', mode='lines+markers',
-                        line=dict(color=BLUE_LIGHT, width=2),
-                        marker=dict(size=6),
-                        fill='tozeroy', fillcolor='rgba(79,195,247,0.1)',
-                    ))
-                    # Línea de tendencia sobre histórico
-                    fig_t.add_trace(go.Scatter(
-                        x=serie['PERIODO'], y=poly(x),
-                        name='Tendencia', mode='lines',
-                        line=dict(color=ACCENT3, width=2, dash='dot'),
-                    ))
-                    # Proyección futura
-                    # Conectar último punto real con proyección
-                    x_ext = [serie['PERIODO'].iloc[-1]] + fechas_proj
-                    y_ext = [float(poly(len(serie)-1))] + list(y_proj)
-                    fig_t.add_trace(go.Scatter(
-                        x=x_ext, y=y_ext,
-                        name='Proyección', mode='lines+markers',
-                        line=dict(color=ACCENT2, width=2, dash='dash'),
-                        marker=dict(size=8, symbol='diamond'),
-                        fill='tozeroy', fillcolor='rgba(255,107,107,0.08)',
-                    ))
-                    # Línea vertical con la fecha real de hoy
-                    hoy = pd.Timestamp.today().normalize()
-                    fig_t.add_vline(
-                        x=hoy.timestamp() * 1000,
-                        line_width=1, line_dash="dot",
-                        line_color=ACCENT,
-                        annotation_text=f"  Hoy ({MESES_FULL[hoy.month]} {hoy.year})",
-                        annotation_font_color=ACCENT,
-                        annotation_position="top right",
-                    )
-
-                    pendiente_dir = "creciente 📈" if coef[0] > 0 else "decreciente 📉"
-                    apply_plotly_defaults(fig_t, f"Tendencia y proyección · {metrica_t.replace('_',' ').title()}")
-                    fig_t.update_layout(height=400)
-                    st.plotly_chart(fig_t, use_container_width=True)
-
-                    # Resumen de proyección
-                    cols_p = st.columns(N_PROJ)
-                    for i, (fp, yp) in enumerate(zip(fechas_proj, y_proj)):
-                        label_p = f"{MESES_FULL[fp.month]} {fp.year}"
-                        cols_p[i].markdown(kpi_card(f"Proyección {label_p}", max(0, yp)), unsafe_allow_html=True)
-
-                    st.markdown(f"""
-                    <div style="margin-top:12px; padding:10px 14px; background:{CARD_BG};
-                                border:1px solid {BORDER}; border-radius:8px; font-size:12px; color:{TEXT_MUTED};">
-                        <b style="color:#CDD6F4;">Método:</b> Regresión lineal (mínimos cuadrados) · 
-                        Tendencia <b style="color:#CDD6F4;">{pendiente_dir}</b> · 
-                        Pendiente: <b style="color:#CDD6F4;">{coef[0]:+,.0f} turnos/mes</b>
-                    </div>
-                    """, unsafe_allow_html=True)
-
-        # ════════════════════════════════════════════════════
-        # VISTA COMPARATIVA (multi-período)
-        # ════════════════════════════════════════════════════
-        else:
-            if len(meses_sel) < 2:
-                st.info("Seleccioná al menos 2 períodos para comparar.")
-                st.stop()
-
-            nombres = " vs ".join([fmt_fecha(m) for m in sorted(meses_sel)])
-            st.markdown(f'<div class="section-subtitle">Comparativa · <span class="badge">{nombres}</span> · Modalidad: {filtro_tipo}</div>', unsafe_allow_html=True)
-
-            metrica_kpi = val_sel[0]
-            agrup_col   = filas_sel[0]
-
-            # KPIs: último período vs penúltimo
-            sorted_meses = sorted(meses_sel)
-            df_ultimo   = df_f[df_f['PERIODO'] == sorted_meses[-1]]
-            df_anterior = df_f[df_f['PERIODO'] == sorted_meses[-2]]
-
-            cols_kpi = st.columns(len(val_sel))
-            for i, metrica in enumerate(val_sel):
-                va  = df_anterior[metrica].sum()
-                vb  = df_ultimo[metrica].sum()
-                dlt = vb - va
-                pct = (dlt / va * 100) if va > 0 else 0
-                label = metrica.replace("_"," ").title()
-                cols_kpi[i].markdown(kpi_card(label, vb, dlt, pct), unsafe_allow_html=True)
-
-            st.markdown("<br>", unsafe_allow_html=True)
-
-            tab_comp, tab_var, tab_tabla = st.tabs(["📊  Comparación", "📈  Variación", "📄  Tabla"])
-
-            with tab_comp:
-                # Gráfico de barras agrupadas por período
-                frames = []
-                for m in sorted_meses:
-                    tmp = df_f[df_f['PERIODO'] == m].groupby(agrup_col)[metrica_kpi].sum().reset_index()
-                    tmp['Período'] = fmt_fecha(m)
-                    frames.append(tmp)
-                df_comp = pd.concat(frames)
-
-                color_seq = [ACCENT, BLUE_LIGHT, ACCENT3, ACCENT2]
-                fig = px.bar(df_comp, x=agrup_col, y=metrica_kpi, color='Período',
-                             barmode='group', text=metrica_kpi,
-                             color_discrete_sequence=color_seq)
-                fig.update_traces(texttemplate='%{text:,.0f}', textposition='outside',
-                                  textfont_size=9, marker_line_width=0)
-                apply_plotly_defaults(fig, f"Comparativa · {metrica_kpi.replace('_',' ').title()} por {agrup_col.title()}")
-                fig.update_layout(height=480, xaxis_tickangle=-50)
-                st.plotly_chart(fig, use_container_width=True)
-
-            with tab_var:
-                # Tabla de variación entre primer y último período
-                g_base   = df_f[df_f['PERIODO']==sorted_meses[0]].groupby(agrup_col)[metrica_kpi].sum()
-                g_actual = df_f[df_f['PERIODO']==sorted_meses[-1]].groupby(agrup_col)[metrica_kpi].sum()
-                df_var   = pd.DataFrame({fmt_fecha(sorted_meses[0]): g_base, fmt_fecha(sorted_meses[-1]): g_actual}).fillna(0)
-                df_var['Diferencia'] = df_var.iloc[:,1] - df_var.iloc[:,0]
-                df_var['Var %']      = (df_var['Diferencia'] / df_var.iloc[:,0] * 100).replace([float('inf'),float('-inf')], 0)
-
-                fig_var = px.bar(
-                    df_var.reset_index().sort_values('Diferencia'),
-                    x='Diferencia', y=agrup_col, orientation='h',
-                    color='Diferencia',
-                    color_continuous_scale=[[0, ACCENT2],[0.5, "#555"],[1, ACCENT]],
-                    text='Diferencia'
-                )
-                fig_var.update_traces(texttemplate='%{text:,.0f}', textposition='outside',
-                                      marker_line_width=0)
-                fig_var.update_coloraxes(showscale=False)
-                apply_plotly_defaults(fig_var, f"Variación absoluta: {fmt_fecha(sorted_meses[0])} → {fmt_fecha(sorted_meses[-1])}")
-                fig_var.update_layout(height=max(400, len(df_var)*22))
-                st.plotly_chart(fig_var, use_container_width=True)
-
-            with tab_tabla:
-                st.dataframe(
-                    df_var.style.format("{:,.0f}", subset=[fmt_fecha(sorted_meses[0]), fmt_fecha(sorted_meses[-1]), 'Diferencia'])
-                               .format("{:.1f}%", subset=['Var %'])
-                               .background_gradient(cmap='RdYlGn', subset=['Diferencia']),
-                    use_container_width=True
-                )
-                st.markdown("<br>", unsafe_allow_html=True)
-                botones_exportacion(
-                    df_var,
-                    nombre_archivo=f"comparativa_{fmt_fecha(sorted_meses[0]).replace(' ','_')}_vs_{fmt_fecha(sorted_meses[-1]).replace(' ','_')}",
-                    titulo_pdf=f"Comparativa de Turnos — {nombres}"
-                )
-
-    except Exception as e:
-        st.error(f"❌ Error en Oferta de Turnos: {e}")
-        st.exception(e)
-
-
-# ============================================================
-# APP 2: CALL CENTER
-# ============================================================
-elif app_mode == "🎧  Call Center":
-
-    @st.cache_data(ttl=300)
-    def cargar_datos_cc():
-        url = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTOxpr7RRNTLGO96pUK8HJ0iy2ZHeqNpiR7OelleljCVoWPuJCO26q5z66VisWB76khl7Tmsqh5CqNC/pub?gid=0&single=true&output=csv"
-        df = pd.read_csv(url, dtype=str).fillna("0")
-        cols_num = ['RECIBIDAS_FIN','ATENDIDAS_FIN','PERDIDAS_FIN',
-                    'RECIBIDAS_PREPAGO','ATENDIDAS_PREPAGO','PERDIDAS_PREPAGO',
-                    'TURNOS_TOTAL_TEL','TURNOS_CONS_TEL','TURNOS_PRACT_TEL']
-        for c in cols_num:
-            if c in df.columns:
-                df[c] = pd.to_numeric(df[c].str.replace('.','',regex=False), errors='coerce').fillna(0)
-        return df
-
-    def parsear_fecha(txt):
-        if pd.isna(txt): return None
-        t = str(txt).lower().strip().replace(".", "")
-        m_map = {'ene':1,'feb':2,'mar':3,'abr':4,'may':5,'jun':6,
-                 'jul':7,'ago':8,'sep':9,'oct':10,'nov':11,'dic':12,
-                 'jan':1,'apr':4,'aug':8,'dec':12}
-        p = t.replace("-"," ").split()
-        if len(p) < 2: return None
-        mes = m_map.get(p[0][:3])
-        yr  = p[1] if len(p[1])==4 else "20"+p[1]
-        return pd.Timestamp(year=int(yr), month=mes, day=1) if mes else None
-
-    try:
-        df = cargar_datos_cc()
-        df['FECHA_REAL'] = df['MES'].apply(parsear_fecha)
-        df = df.dropna(subset=['FECHA_REAL']).sort_values('FECHA_REAL')
-        df['TOTAL_LLAMADAS']  = df['RECIBIDAS_FIN']  + df['RECIBIDAS_PREPAGO']
-        df['TOTAL_ATENDIDAS'] = df['ATENDIDAS_FIN']  + df['ATENDIDAS_PREPAGO']
-        df['TOTAL_PERDIDAS']  = df['PERDIDAS_FIN']   + df['PERDIDAS_PREPAGO']
-
-        with st.sidebar:
-            st.markdown(f"<div style='font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:{TEXT_MUTED};margin-bottom:8px;'>VISTA</div>", unsafe_allow_html=True)
-            modo = st.radio("", ["📅  Mensual", "🔄  Interanual"], label_visibility="collapsed")
-            st.markdown("<hr>", unsafe_allow_html=True)
-            segmento = st.selectbox("SEGMENTO", ["Unificado","Solo Financiadores","Solo Prepago"])
-
-        st.markdown('<div class="section-header"><span class="section-title">🎧 Call Center</span></div>', unsafe_allow_html=True)
-
-        # ── VISTA MENSUAL ────────────────────────────────────
-        if "Mensual" in modo:
-            fechas = sorted(df['FECHA_REAL'].unique(), reverse=True)
-            sel    = st.selectbox("Período", fechas,
-                                  format_func=lambda x: f"{MESES_FULL[x.month]} {x.year}")
-
-            d    = df[df['FECHA_REAL'] == sel].iloc[0]
-            d_ant = df[df['FECHA_REAL'] < sel].sort_values('FECHA_REAL').iloc[-1] if len(df[df['FECHA_REAL'] < sel]) > 0 else None
-
-            if segmento == "Solo Financiadores":
-                rec, aten, perd = d['RECIBIDAS_FIN'], d['ATENDIDAS_FIN'], d['PERDIDAS_FIN']
-                rec_a, aten_a, perd_a = (d_ant['RECIBIDAS_FIN'], d_ant['ATENDIDAS_FIN'], d_ant['PERDIDAS_FIN']) if d_ant is not None else (0,0,0)
-            elif segmento == "Solo Prepago":
-                rec, aten, perd = d['RECIBIDAS_PREPAGO'], d['ATENDIDAS_PREPAGO'], d['PERDIDAS_PREPAGO']
-                rec_a, aten_a, perd_a = (d_ant['RECIBIDAS_PREPAGO'], d_ant['ATENDIDAS_PREPAGO'], d_ant['PERDIDAS_PREPAGO']) if d_ant is not None else (0,0,0)
-            else:
-                rec, aten, perd = d['TOTAL_LLAMADAS'], d['TOTAL_ATENDIDAS'], d['TOTAL_PERDIDAS']
-                rec_a, aten_a, perd_a = (d_ant['TOTAL_LLAMADAS'], d_ant['TOTAL_ATENDIDAS'], d_ant['TOTAL_PERDIDAS']) if d_ant is not None else (0,0,0)
-
-            sla = (aten / rec * 100) if rec > 0 else 0
-
-            st.markdown(f'<div class="section-subtitle">Período seleccionado · <span class="badge">{MESES_FULL[sel.month]} {sel.year}</span></div>', unsafe_allow_html=True)
-
-            def delta_or_none(v, va): return (v-va, (v-va)/va*100) if va > 0 else (None, None)
-
-            c1,c2,c3,c4 = st.columns(4)
-            d1, p1 = delta_or_none(rec, rec_a)
-            d2, p2 = delta_or_none(aten, aten_a)
-            d3, p3 = delta_or_none(perd, perd_a)
-
-            c1.markdown(kpi_card("Llamadas Recibidas", rec, d1, p1), unsafe_allow_html=True)
-            c2.markdown(kpi_card("Atendidas", aten, d2, p2), unsafe_allow_html=True)
-            c3.markdown(kpi_card("Abandonadas", perd, d3, p3), unsafe_allow_html=True)
-            c4.markdown(kpi_card("Nivel de Servicio", sla, suffix="%"), unsafe_allow_html=True)
-            if sla < 90:
-                c4.error(f"⚠️ Bajo meta — {sla:.1f}% < 90%")
-
-            st.markdown("<br>", unsafe_allow_html=True)
-            col1, col2 = st.columns(2)
-
-            with col1:
-                fig_pie = go.Figure(go.Pie(
-                    labels=['Atendidas','Abandonadas'],
-                    values=[aten, perd],
-                    hole=0.55,
-                    marker=dict(colors=[ACCENT, ACCENT2],
-                                line=dict(color='rgba(0,0,0,0)', width=0)),
-                    textinfo='percent+label',
-                    insidetextorientation='radial'
-                ))
-                fig_pie.add_annotation(text=f"<b>{sla:.0f}%</b><br>SLA",
-                                       x=0.5, y=0.5, showarrow=False,
-                                       font=dict(size=18, color="#CDD6F4"))
-                apply_plotly_defaults(fig_pie, "Nivel de atención")
-                st.plotly_chart(fig_pie, use_container_width=True)
-
-            with col2:
-                turnos_data = {
-                    'Concepto': ['Consultorios', 'Prácticas', 'Total'],
-                    'Cantidad': [d['TURNOS_CONS_TEL'], d['TURNOS_PRACT_TEL'], d['TURNOS_TOTAL_TEL']],
-                }
-                fig_t = px.bar(pd.DataFrame(turnos_data), x='Concepto', y='Cantidad',
-                               text='Cantidad',
-                               color='Concepto',
-                               color_discrete_map={'Consultorios': BLUE_LIGHT,
-                                                   'Prácticas': BLUE_DARK,
-                                                   'Total': ACCENT})
-                fig_t.update_traces(texttemplate='%{text:,.0f}', textposition='outside',
-                                    marker_line_width=0)
-                fig_t.update_layout(showlegend=False)
-                apply_plotly_defaults(fig_t, "Turnos gestionados por teléfono")
-                st.plotly_chart(fig_t, use_container_width=True)
-
-            # Evolución histórica del SLA
-            st.markdown("<hr>", unsafe_allow_html=True)
-            df['SLA'] = (df['TOTAL_ATENDIDAS'] / df['TOTAL_LLAMADAS'] * 100).fillna(0)
-            fig_evo = go.Figure()
-            fig_evo.add_trace(go.Scatter(
-                x=df['FECHA_REAL'], y=df['TOTAL_LLAMADAS'],
-                name='Recibidas', fill='tozeroy',
-                line=dict(color=BLUE_LIGHT, width=2),
-                fillcolor=f"rgba(79,195,247,0.15)"
-            ))
-            fig_evo.add_trace(go.Scatter(
-                x=df['FECHA_REAL'], y=df['TOTAL_ATENDIDAS'],
-                name='Atendidas', fill='tozeroy',
-                line=dict(color=ACCENT, width=2),
-                fillcolor=f"rgba(0,191,165,0.2)"
-            ))
-            fig_evo.add_trace(go.Scatter(
-                x=df['FECHA_REAL'], y=df['TOTAL_PERDIDAS'],
-                name='Abandonadas', line=dict(color=ACCENT2, width=2, dash='dot'),
-            ))
-            apply_plotly_defaults(fig_evo, "Evolución histórica de llamadas")
-            fig_evo.update_layout(height=280)
-            st.plotly_chart(fig_evo, use_container_width=True)
-
-        # ── VISTA INTERANUAL ─────────────────────────────────
-        else:
-            st.markdown(f'<div class="section-subtitle">Mismo mes en distintos años</div>', unsafe_allow_html=True)
-            mes_nom = st.selectbox("Mes a comparar", list(MESES_FULL.values()))
-            m_num   = list(MESES_FULL.values()).index(mes_nom) + 1
-            df_i    = df[df['FECHA_REAL'].dt.month == m_num].copy()
-
-            if df_i.empty:
-                st.warning("Sin datos históricos para este mes.")
-            else:
-                df_i['AÑO'] = df_i['FECHA_REAL'].dt.year.astype(str)
-                df_i['SLA'] = (df_i['TOTAL_ATENDIDAS'] / df_i['TOTAL_LLAMADAS'] * 100).fillna(0)
-
-                fig = go.Figure()
-                fig.add_trace(go.Bar(x=df_i['AÑO'], y=df_i['TOTAL_ATENDIDAS'],
-                                     name='Atendidas', marker_color=ACCENT,
-                                     text=df_i['TOTAL_ATENDIDAS'], texttemplate='%{text:,.0f}'))
-                fig.add_trace(go.Bar(x=df_i['AÑO'], y=df_i['TOTAL_PERDIDAS'],
-                                     name='Abandonadas', marker_color=ACCENT2,
-                                     text=df_i['TOTAL_PERDIDAS'], texttemplate='%{text:,.0f}'))
-                fig.add_trace(go.Scatter(x=df_i['AÑO'], y=df_i['SLA'],
-                                         name='SLA %', yaxis='y2',
-                                         line=dict(color=ACCENT3, width=3),
-                                         mode='lines+markers+text',
-                                         text=df_i['SLA'].apply(lambda x: f"{x:.0f}%"),
-                                         textposition='top center'))
-                apply_plotly_defaults(fig, f"Desempeño en {mes_nom} — comparativa interanual")
-                fig.update_layout(
-                    barmode='group',
-                    yaxis2=dict(overlaying='y', side='right', showgrid=False,
-                                title='SLA %', color=ACCENT3),
-                    height=400
-                )
-                st.plotly_chart(fig, use_container_width=True)
-
-                with st.expander("Ver datos históricos"):
-                    st.dataframe(df_i[['AÑO','TOTAL_LLAMADAS','TOTAL_ATENDIDAS','TOTAL_PERDIDAS','SLA']]
-                                 .style.format({'TOTAL_LLAMADAS':'{:,.0f}','TOTAL_ATENDIDAS':'{:,.0f}',
-                                                'TOTAL_PERDIDAS':'{:,.0f}','SLA':'{:.1f}%'}),
-                                 use_container_width=True)
-
-    except Exception as e:
-        st.error(f"❌ Error en Call Center: {e}")
-        st.exception(e)
-
-
-# ============================================================
-# APP 3: AUSENTISMO
-# ============================================================
-elif app_mode == "📉  Ausentismo":
-
-    @st.cache_data(ttl=300)
-    def cargar_ausencias():
-        url = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQHFwl-Dxn-Rw9KN_evkCMk2Er8lQqgZMzAtN4LuEkWcCeBVUNwgb8xeIFKvpyxMgeGTeJ3oEWKpMZj/pub?gid=2132722842&single=true&output=csv"
-        df = pd.read_csv(url)
-        df.columns = df.columns.str.strip()
-        df['FECHA_INICIO'] = pd.to_datetime(df['FECHA_INICIO'], dayfirst=True, errors='coerce')
-        return df
-
-    try:
-        df_aus = cargar_ausencias()
-
-        # Detectar columna de métrica principal
-        if 'CONSULTORIOS_REALES' in df_aus.columns:
-            col_target = 'CONSULTORIOS_REALES'
-            label_target = "Consultorios Cancelados"
-        elif 'DIAS_CAIDOS' in df_aus.columns:
-            col_target = 'DIAS_CAIDOS'
-            label_target = "Días Caídos"
-        else:
-            st.error("❌ No se encontró la columna de métrica (CONSULTORIOS_REALES o DIAS_CAIDOS).")
-            st.stop()
-
-        if df_aus[col_target].dtype == 'object':
-            df_aus[col_target] = pd.to_numeric(
-                df_aus[col_target].str.replace('.','',regex=False), errors='coerce').fillna(0)
-        else:
-            df_aus[col_target] = pd.to_numeric(df_aus[col_target], errors='coerce').fillna(0)
-
-        with st.sidebar:
-            st.markdown(f"<div style='font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:{TEXT_MUTED};margin-bottom:8px;'>FILTROS</div>", unsafe_allow_html=True)
-            años = sorted(df_aus['FECHA_INICIO'].dt.year.dropna().unique())
-            año_sel = st.selectbox("AÑO", años, index=len(años)-1)
-            df_y = df_aus[df_aus['FECHA_INICIO'].dt.year == año_sel].copy()
-            df_y['MES_NUM'] = df_y['FECHA_INICIO'].dt.month
-            meses_disp = sorted(df_y['MES_NUM'].dropna().unique())
-            meses_sel  = st.multiselect("MES(ES)", meses_disp,
-                                        default=meses_disp,
-                                        format_func=lambda x: MESES_FULL.get(x, x))
-            if meses_sel: df_y = df_y[df_y['MES_NUM'].isin(meses_sel)]
-
-            st.markdown("<hr>", unsafe_allow_html=True)
-            # Filtro cruzado — leer session_state de Turnos
-            cross_srv = st.session_state.get('cross_servicio', [])
-            cross_dpt = st.session_state.get('cross_depto', [])
-            if cross_srv or cross_dpt:
-                st.markdown(f"""
-                <div style="background:rgba(0,191,165,0.1);border:1px solid rgba(0,191,165,0.3);
-                            border-radius:8px;padding:8px 10px;font-size:11px;color:{ACCENT};margin-bottom:8px;">
-                    🔗 <b>Filtro cruzado activo desde Turnos</b>
-                </div>
-                """, unsafe_allow_html=True)
-
-            for col in ['DEPARTAMENTO','SERVICIO','MOTIVO','PROFESIONAL']:
-                if col in df_y.columns:
-                    opciones = sorted(df_y[col].astype(str).unique())
-                    # Pre-cargar desde session_state si corresponde
-                    if col == 'SERVICIO' and cross_srv:
-                        default_val = [s for s in cross_srv if s in opciones]
-                    elif col == 'DEPARTAMENTO' and cross_dpt:
-                        default_val = [d for d in cross_dpt if d in opciones]
-                    else:
-                        default_val = []
-                    sel = st.multiselect(col, opciones, default=default_val)
-                    if sel: df_y = df_y[df_y[col].isin(sel)]
-
-        if df_y.empty:
-            st.warning("Sin datos para los filtros seleccionados.")
-            st.stop()
-
-        st.markdown('<div class="section-header"><span class="section-title">📉 Gestión de Ausentismo y Licencias</span></div>', unsafe_allow_html=True)
-        meses_badge = " · ".join([MESES_FULL.get(m, str(m)) for m in sorted(meses_sel)])
-        st.markdown(f'<div class="section-subtitle">Año {año_sel} · <span class="badge">{meses_badge}</span></div>', unsafe_allow_html=True)
-
-        # KPIs
-        total_cancel  = df_y[col_target].sum()
-        n_eventos     = len(df_y)
-        n_profs       = df_y['PROFESIONAL'].nunique() if 'PROFESIONAL' in df_y.columns else 0
-        top_motivo    = df_y['MOTIVO'].mode()[0] if 'MOTIVO' in df_y.columns and not df_y.empty else "-"
-
-        c1,c2,c3,c4 = st.columns(4)
-        c1.markdown(kpi_card(label_target, total_cancel), unsafe_allow_html=True)
-        c2.markdown(kpi_card("Eventos / Licencias", n_eventos), unsafe_allow_html=True)
-        c3.markdown(kpi_card("Profesionales", n_profs), unsafe_allow_html=True)
-
-        # Para motivo principal usamos métrica nativa (string, no numérico)
-        c4.metric("Motivo Principal", str(top_motivo))
-
-        st.markdown("<br>", unsafe_allow_html=True)
-
-        col1, col2 = st.columns(2)
-
-        with col1:
-            if 'MOTIVO' in df_y.columns:
-                # Agrupar motivos menores en "Otros" — solo Top 8 visibles
-                df_mot_full = df_y.groupby('MOTIVO')[col_target].sum().reset_index().sort_values(col_target, ascending=False)
-                TOP_N = 8
-                if len(df_mot_full) > TOP_N:
-                    top8     = df_mot_full.head(TOP_N)
-                    otros    = pd.DataFrame([{'MOTIVO': 'OTROS', col_target: df_mot_full.iloc[TOP_N:][col_target].sum()}])
-                    df_mot   = pd.concat([top8, otros], ignore_index=True)
-                else:
-                    df_mot = df_mot_full
-
-                COLOR_SEQ = [ACCENT, BLUE_LIGHT, ACCENT3, ACCENT2, "#B39DDB", "#80DEEA", "#FFCC80", "#F48FB1", "#AAAAAA"]
-                fig_pie = go.Figure(go.Pie(
-                    labels=df_mot['MOTIVO'],
-                    values=df_mot[col_target],
-                    hole=0.52,
-                    marker=dict(colors=COLOR_SEQ[:len(df_mot)],
-                                line=dict(color='rgba(0,0,0,0)', width=0)),
-                    textinfo='percent',
-                    hovertemplate='<b>%{label}</b><br>%{value:,.0f}<br>%{percent}<extra></extra>',
-                    insidetextorientation='radial',
-                ))
-                apply_plotly_defaults(fig_pie, "Distribución por motivo")
-                fig_pie.update_layout(
-                    legend=dict(
-                        orientation="v",
-                        x=1.02, y=0.5,
-                        xanchor="left", yanchor="middle",
-                        font=dict(size=12),
-                        itemwidth=30,
-                    ),
-                    margin=dict(l=20, r=160, t=40, b=20),
-                    height=420,
-                )
-                st.plotly_chart(fig_pie, use_container_width=True)
-
-        with col2:
-            if 'SERVICIO' in df_y.columns:
-                d_serv = df_y.groupby('SERVICIO')[col_target].sum().reset_index()\
-                             .sort_values(col_target).tail(10)
-                fig_hs = px.bar(d_serv, x=col_target, y='SERVICIO', orientation='h',
-                                text=col_target, color=col_target,
-                                color_continuous_scale=[[0, BLUE_DARK],[1, ACCENT2]])
-                fig_hs.update_traces(texttemplate='%{text:,.0f}', textposition='outside',
-                                     marker_line_width=0)
-                fig_hs.update_coloraxes(showscale=False)
-                apply_plotly_defaults(fig_hs, "Top 10 servicios afectados")
-                fig_hs.update_layout(height=420)
-                st.plotly_chart(fig_hs, use_container_width=True)
-
-        # Top profesionales — tooltip con desglose de motivos para cada uno
-        if 'PROFESIONAL' in df_y.columns:
-            st.markdown("<hr>", unsafe_allow_html=True)
-            d_prof = df_y.groupby('PROFESIONAL')[col_target].sum().reset_index()\
-                         .sort_values(col_target).tail(15)
-
-            # Construir texto de tooltip con desglose de motivos por profesional
-            if 'MOTIVO' in df_y.columns:
-                def motivos_tooltip(prof_nombre):
-                    sub = df_y[df_y['PROFESIONAL'] == prof_nombre]\
-                              .groupby('MOTIVO')[col_target].sum()\
-                              .sort_values(ascending=False)
-                    lines = [f"  {m}: {int(v)}" for m, v in sub.items()]
-                    return "<br>".join(lines)
-
-                d_prof['tooltip_motivos'] = d_prof['PROFESIONAL'].apply(motivos_tooltip)
-
-                fig_p = go.Figure(go.Bar(
-                    x=d_prof[col_target],
-                    y=d_prof['PROFESIONAL'],
-                    orientation='h',
-                    text=d_prof[col_target],
-                    texttemplate='%{text:,.0f}',
-                    textposition='outside',
-                    marker=dict(
-                        color=d_prof[col_target],
-                        colorscale=[[0, BLUE_DARK],[0.5, BLUE_LIGHT],[1, ACCENT]],
-                        line_width=0,
-                    ),
-                    customdata=d_prof['tooltip_motivos'],
-                    hovertemplate=(
-                        "<b>%{y}</b><br>"
-                        f"<b>Total {col_target.replace('_',' ').title()}:</b> %{{x:,.0f}}<br>"
-                        "<br><b>Desglose por motivo:</b><br>"
-                        "%{customdata}"
-                        "<extra></extra>"
-                    ),
-                ))
-            else:
-                fig_p = px.bar(d_prof, x=col_target, y='PROFESIONAL', orientation='h',
-                               text=col_target, color=col_target,
-                               color_continuous_scale=[[0, BLUE_DARK],[0.5, BLUE_LIGHT],[1, ACCENT]])
-                fig_p.update_traces(texttemplate='%{text:,.0f}', textposition='outside',
-                                    marker_line_width=0)
-                fig_p.update_coloraxes(showscale=False)
-
-            apply_plotly_defaults(fig_p, "Top 15 profesionales con mayor ausentismo")
-            fig_p.update_layout(height=max(420, len(d_prof)*30))
-            st.plotly_chart(fig_p, use_container_width=True)
-
-        # Evolución mensual
-        st.markdown("<hr>", unsafe_allow_html=True)
-        df_y_evo = df_y.copy()
-        df_y_evo['MES_LABEL'] = df_y_evo['FECHA_INICIO'].dt.month.map(MESES_FULL)
-        df_evo = df_y_evo.groupby('MES_NUM')[col_target].sum().reset_index()
-        df_evo['MES_LABEL'] = df_evo['MES_NUM'].map(MESES_FULL)
-        df_evo = df_evo.sort_values('MES_NUM')
-
-        fig_evo = go.Figure(go.Bar(
-            x=df_evo['MES_LABEL'], y=df_evo[col_target],
-            text=df_evo[col_target], texttemplate='%{text:,.0f}',
-            marker=dict(color=df_evo[col_target],
-                        colorscale=[[0, BLUE_LIGHT],[1, ACCENT2]],
-                        line_width=0)
+    # ── Tasa de ocupación (solo si hay dato real) ───────────
+    if m['tiene_dato_real'] and not m['df_ocup'].empty:
+        st.markdown('<div class="sec-title">📋 Tasa de Ocupación por Servicio</div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="sec-sub">Turnos dados / turnos ofertados · Verde = buena ocupación · Rojo = baja ocupación · &gt;100% = alta demanda espontánea</div>', unsafe_allow_html=True)
+
+        ocup = m['df_ocup'].sort_values('TASA_OCUP', ascending=True).copy()
+        ocup['color'] = ocup['TASA_OCUP'].apply(
+            lambda x: ACCENT2 if x < 60 else (ACCENT3 if x < 85 else ACCENT4))
+        ocup['etiqueta'] = ocup['TASA_OCUP'].apply(lambda x: f"{x:.0f}%")
+
+        baja = ocup[ocup['TASA_OCUP'] < 60].sort_values('PERD_INASISTENCIA', ascending=False).head(3)
+        alta = ocup[ocup['TASA_OCUP'] > 100]
+        if not baja.empty:
+            perd_baja    = baja['PERD_INASISTENCIA'].sum()
+            nombres_baja = ", ".join(baja['SERVICIO'].tolist())
+            st.markdown(f"""
+            <div class="insight-box insight-box-blue">
+                👤 <b>Inasistencia del paciente:</b> Los servicios con menor ocupación son
+                <b>{nombres_baja}</b> — representan <b>{fmt_millones(perd_baja)}</b> de pérdida
+                por turnos disponibles no utilizados por el paciente.
+            </div>
+            """, unsafe_allow_html=True)
+        if not alta.empty:
+            st.markdown(f"""
+            <div class="insight-box insight-box-teal">
+                ⚡ <b>{len(alta)} servicio(s) superan el 100% de ocupación</b> — tienen alta demanda
+                espontánea. Considera ampliar la oferta: {", ".join(alta['SERVICIO'].tolist())}.
+            </div>
+            """, unsafe_allow_html=True)
+
+        fig_ocup = go.Figure(go.Bar(
+            x=ocup['TASA_OCUP'], y=ocup['SERVICIO'], orientation='h',
+            text=ocup['etiqueta'], textposition='outside',
+            marker=dict(color=ocup['color'], line_width=0),
+            customdata=np.stack([ocup['TURNO_DADOS'], ocup['TURNOS_OFERTA'],
+                                 ocup['FACT_REAL'], ocup['PERD_INASISTENCIA']], axis=1),
+            hovertemplate=(
+                "<b>%{y}</b><br>Tasa: %{x:.1f}%<br>"
+                "Turnos dados: %{customdata[0]:,.0f}<br>"
+                "Turnos ofertados: %{customdata[1]:,.0f}<br>"
+                "Facturación real: $%{customdata[2]:,.0f}<br>"
+                "Pérdida inasistencia: $%{customdata[3]:,.0f}<extra></extra>"
+            )
         ))
-        apply_plotly_defaults(fig_evo, f"Evolución mensual de {label_target}")
-        fig_evo.update_layout(height=280)
-        st.plotly_chart(fig_evo, use_container_width=True)
+        fig_ocup.add_vline(x=100, line_width=1, line_dash="dash", line_color=TEXT_MUTED,
+                           annotation_text="100%", annotation_font_color=TEXT_MUTED)
+        apply_plotly_defaults(fig_ocup, "Tasa de ocupación por servicio")
+        fig_ocup.update_layout(height=max(420, len(ocup)*22), xaxis_ticksuffix="%")
+        st.plotly_chart(fig_ocup, use_container_width=True)
+        st.markdown("<hr>", unsafe_allow_html=True)
 
-        with st.expander("📄 Ver registros detallados"):
-            st.dataframe(df_y, use_container_width=True)
-            st.markdown("<br>", unsafe_allow_html=True)
-            botones_exportacion(
-                df_y,
-                nombre_archivo=f"ausentismo_{año_sel}",
-                titulo_pdf=f"Ausentismo y Licencias — {año_sel}"
+    # ── Top pérdidas por ausentismo profesional ─────────────
+    st.markdown('<div class="sec-title">📉 Pérdida por Ausentismo del Profesional</div>', unsafe_allow_html=True)
+
+    grp = m['df_perd'].groupby('SERVICIO')[['DINERO_PERDIDO','TURNOS_PERDIDOS']].sum().reset_index()
+    grp = grp[grp['DINERO_PERDIDO'] > 0].sort_values('DINERO_PERDIDO', ascending=False)
+
+    if grp.empty:
+        st.info("Sin pérdidas por ausentismo en este período.")
+    else:
+        top3 = grp.head(3)
+        pct_p = (top3['DINERO_PERDIDO'].sum() / m['total_perd'] * 100) if m['total_perd'] > 0 else 0
+        st.markdown(f"""
+        <div class="insight-box">
+            ⚠️ <b>Regla de Pareto:</b> El <b>{pct_p:.0f}%</b> de la pérdida por ausentismo
+            se concentra en: <b>{", ".join(top3["SERVICIO"].tolist())}</b>.
+        </div>
+        """, unsafe_allow_html=True)
+
+        tab1, tab2 = st.tabs(["📊  Top 10 servicios", "📋  Todos los servicios"])
+        with tab1:
+            top10 = grp.head(10).sort_values('DINERO_PERDIDO', ascending=True).copy()
+            top10['etiqueta'] = top10['DINERO_PERDIDO'].apply(fmt_millones)
+            top10['pct']      = (top10['DINERO_PERDIDO'] / m['total_perd'] * 100).round(1)
+            fig_b = px.bar(top10, x='DINERO_PERDIDO', y='SERVICIO', orientation='h',
+                           text='etiqueta', color='DINERO_PERDIDO',
+                           color_continuous_scale=[[0,"#FF8A65"],[0.5,ACCENT2],[1,"#B71C1C"]],
+                           custom_data=['TURNOS_PERDIDOS','pct'])
+            fig_b.update_traces(textposition='outside', marker_line_width=0,
+                hovertemplate="<b>%{y}</b><br>Pérdida: %{x:$,.0f}<br>Turnos: %{customdata[0]:,.0f}<br>% total: %{customdata[1]:.1f}%<extra></extra>")
+            fig_b.update_coloraxes(showscale=False)
+            apply_plotly_defaults(fig_b, "Top 10 — pérdida por ausentismo profesional")
+            fig_b.update_layout(height=420)
+            st.plotly_chart(fig_b, use_container_width=True)
+        with tab2:
+            dt = grp.copy()
+            dt['% del total']     = (dt['DINERO_PERDIDO'] / m['total_perd'] * 100).round(1).fillna(0)
+            dt['Pérdida ($)']     = dt['DINERO_PERDIDO'].apply(lambda x: f"$ {x:,.0f}")
+            dt['Turnos Perdidos'] = dt['TURNOS_PERDIDOS'].apply(lambda x: f"{x:,.0f}")
+            st.dataframe(
+                dt[['SERVICIO','Pérdida ($)','Turnos Perdidos','% del total']]
+                    .style.bar(subset=['% del total'], color=ACCENT2, vmin=0, vmax=100),
+                use_container_width=True, hide_index=True
             )
 
-    except Exception as e:
-        st.error(f"❌ Error en Ausentismo: {e}")
-        st.exception(e)
+    st.markdown("<hr>", unsafe_allow_html=True)
+
+    # ── Simulador de estrategia ─────────────────────────────
+    st.markdown('<div class="sec-title">🎯 Simulador de Estrategia de Recupero</div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="sec-sub">¿Cuánto dinero se recuperaría reduciendo el ausentismo del profesional?</div>', unsafe_allow_html=True)
+
+    tipo_sim = st.radio("Alcance:", ["🏢  Global (todo CEMIC)", "🔬  Por servicio"], horizontal=True)
+
+    if "Por servicio" in tipo_sim and not grp.empty:
+        servicio_sel    = st.selectbox("Servicio a intervenir:", grp['SERVICIO'].tolist())
+        base_calc       = grp[grp['SERVICIO']==servicio_sel]['DINERO_PERDIDO'].values[0]
+        turnos_base     = grp[grp['SERVICIO']==servicio_sel]['TURNOS_PERDIDOS'].values[0]
+        pct_sobre_total = (base_calc / m['total_perd'] * 100) if m['total_perd'] > 0 else 0
+        st.markdown(f"""
+        <div class="insight-box insight-box-amber">
+            📌 <b>{servicio_sel}</b> — pérdida: <b>{fmt_millones(base_calc)}</b>
+            ({turnos_base:,.0f} turnos · {pct_sobre_total:.1f}% del total).
+        </div>
+        """, unsafe_allow_html=True)
+        texto_base = servicio_sel
+    else:
+        base_calc   = m['total_perd']
+        turnos_base = m['turnos_perd']
+        texto_base  = "todo CEMIC"
+
+    col_sl, col_res = st.columns([3, 1])
+    with col_sl:
+        meta_pct = st.slider(f"¿Qué % de la pérdida de {texto_base} se puede recuperar?",
+                             0, 100, 25, key="slider_rec")
+        st.progress(meta_pct / 100)
+    with col_res:
+        dinero_rec = base_calc * (meta_pct / 100)
+        turnos_rec = turnos_base * (meta_pct / 100)
+        st.markdown(kpi_card("Ingreso Extra Estimado", dinero_rec,
+                             delta_label=f"{turnos_rec:,.0f} turnos recuperados",
+                             variant="success"), unsafe_allow_html=True)
+
+    anual_rec = dinero_rec * 12
+    cm, ca    = st.columns(2)
+    cm.markdown(kpi_card("Impacto Mensual", dinero_rec, variant="success"), unsafe_allow_html=True)
+    ca.markdown(kpi_card("Proyección Anual del Recupero", anual_rec, variant="success"), unsafe_allow_html=True)
+    ca.caption("Si se mantiene la mejora los 12 meses")
+
+    if "Por servicio" in tipo_sim and not grp.empty:
+        impacto = (dinero_rec / m['total_perd'] * 100) if m['total_perd'] > 0 else 0
+        st.markdown(f"""
+        <div class="insight-box insight-box-teal" style="margin-top:12px;">
+            💡 Gestionando solo <b>{servicio_sel}</b> al <b>{meta_pct}%</b>,
+            se resuelve el <b>{impacto:.1f}%</b> del problema.
+            Proyectado anualmente: <b>{fmt_millones(anual_rec)}</b>.
+        </div>
+        """, unsafe_allow_html=True)
+
+    st.markdown("<hr>", unsafe_allow_html=True)
+
+    # ── Evolución histórica ─────────────────────────────────
+    st.markdown('<div class="sec-title">📈 Evolución Histórica</div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="sec-sub">Barras verdes oscuras = dato real · Barras transparentes = estimado por oferta · Línea = pérdida por ausentismo</div>', unsafe_allow_html=True)
+
+    hist_rows = []
+    for p in fechas_disp:
+        try:
+            do, da, dv, dt = filtrar(p)
+            real = pd.Timestamp(p) in periodos_reales
+            mh   = calcular_metricas(do, da, dv, dt if real else None)
+            hist_rows.append({
+                'Período'    : p, 'Label': fmt_fecha(p),
+                'Facturación': mh['total_fact_real'] if (real and mh['total_fact_real']) else mh['total_base'],
+                'Pérdida'    : mh['total_perd'],
+                '% Fuga'     : mh['pct_fuga'],
+                'Tasa Ocup'  : mh['tasa_ocup_prom'] if real else None,
+                'es_real'    : real,
+            })
+        except:
+            pass
+
+    if len(hist_rows) >= 2:
+        df_hist = pd.DataFrame(hist_rows).sort_values('Período')
+        df_real = df_hist[df_hist['es_real']]
+        df_est  = df_hist[~df_hist['es_real']]
+
+        fig_evo = go.Figure()
+        if not df_real.empty:
+            fig_evo.add_trace(go.Bar(x=df_real['Label'], y=df_real['Facturación'],
+                name='Facturación real', marker_color=ACCENT4, opacity=0.9, marker_line_width=0))
+        if not df_est.empty:
+            fig_evo.add_trace(go.Bar(x=df_est['Label'], y=df_est['Facturación'],
+                name='Facturación estimada', marker_color=ACCENT4, opacity=0.3, marker_line_width=0))
+        fig_evo.add_trace(go.Scatter(x=df_hist['Label'], y=df_hist['Pérdida'],
+            name='Pérdida ausentismo', line=dict(color=ACCENT2, width=2), mode='lines+markers'))
+
+        df_con_tasa = df_hist[df_hist['Tasa Ocup'].notna()]
+        if not df_con_tasa.empty:
+            fig_evo.add_trace(go.Scatter(x=df_con_tasa['Label'], y=df_con_tasa['Tasa Ocup'],
+                name='Tasa ocupación %', yaxis='y2',
+                line=dict(color=ACCENT3, width=2, dash='dot'), mode='lines+markers+text',
+                text=df_con_tasa['Tasa Ocup'].apply(lambda x: f"{x:.0f}%"),
+                textposition='top center'))
+
+        apply_plotly_defaults(fig_evo, "Facturación y pérdida mensual")
+        fig_evo.update_layout(barmode='overlay', height=360,
+            yaxis2=dict(overlaying='y', side='right', showgrid=False,
+                        title='Tasa Ocup %', color=ACCENT3, ticksuffix='%'))
+        st.plotly_chart(fig_evo, use_container_width=True)
+
+    st.markdown("<hr>", unsafe_allow_html=True)
+
+    # ── Detalle y exportación ───────────────────────────────
+    with st.expander("📄 Ver detalle completo y exportar"):
+        df_exp = m['df_perd'].copy()
+        cols   = [c for c in ['FECHA_INICIO','SERVICIO','PROFESIONAL','_COL_TARGET',
+                               'RENDIMIENTO_USADO','TURNOS_PERDIDOS','DINERO_PERDIDO'] if c in df_exp.columns]
+        df_exp = df_exp[cols].sort_values('DINERO_PERDIDO', ascending=False)
+        st.dataframe(df_exp.style.format({
+            'DINERO_PERDIDO':'$ {:,.0f}','TURNOS_PERDIDOS':'{:,.0f}',
+            '_COL_TARGET':'{:,.0f}','RENDIMIENTO_USADO':'{:,.0f}'}),
+            use_container_width=True, hide_index=True)
+        st.markdown("<br>", unsafe_allow_html=True)
+        cx, cc, _ = st.columns([1,1,4])
+        cx.download_button("⬇️ Excel", generar_excel(df_exp,"Pérdidas"),
+            f"perdidas_{fmt_fecha(periodo_sel).replace(' ','_')}.xlsx",
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True)
+        cc.download_button("⬇️ CSV", df_exp.to_csv(index=False).encode('utf-8'),
+            f"perdidas_{fmt_fecha(periodo_sel).replace(' ','_')}.csv",
+            "text/csv", use_container_width=True)
+
+except Exception as e:
+    st.error(f"❌ Error de cálculo: {e}")
+    st.exception(e)
