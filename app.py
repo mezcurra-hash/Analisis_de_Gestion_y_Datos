@@ -267,7 +267,10 @@ except Exception as e:
     st.stop()
 
 tiene_td       = not df_turnos_dados.empty and 'TURNO_DADOS' in df_turnos_dados.columns
-periodos_reales = set(df_turnos_dados['PERIODO'].dropna().unique()) if tiene_td else set()
+# Normalizar períodos a date para comparación robusta
+periodos_reales = set(
+    pd.to_datetime(df_turnos_dados['PERIODO'].dropna()).dt.to_period('M')
+) if tiene_td else set()
 
 # ============================================================
 # SIDEBAR
@@ -288,7 +291,7 @@ with st.sidebar:
         st.stop()
 
     periodo_sel  = st.selectbox("PERÍODO", fechas_disp, index=len(fechas_disp)-1, format_func=fmt_fecha)
-    es_dato_real = pd.Timestamp(periodo_sel) in periodos_reales
+    es_dato_real = pd.Timestamp(periodo_sel).to_period('M') in periodos_reales
 
     if tiene_td:
         badge_txt = "✅ Dato real disponible" if es_dato_real else "📈 Sin dato real — modo estimación"
@@ -327,7 +330,8 @@ if tiene_td and periodos_reales:
     tasas = []
     for p in sorted(periodos_reales):
         try:
-            do, da, dv, dt = filtrar(p)
+            p_ts = p.to_timestamp()
+            do, da, dv, dt = filtrar(p_ts)
             mh = calcular_metricas(do, da, dv, dt)
             if mh['tasa_ocup_prom'] and not np.isnan(mh['tasa_ocup_prom']):
                 tasas.append(mh['tasa_ocup_prom'])
@@ -346,7 +350,7 @@ try:
     m_ant = None
     if periodo_ant is not None:
         try:
-            ant_real = pd.Timestamp(periodo_ant) in periodos_reales
+            ant_real = pd.Timestamp(periodo_ant).to_period('M') in periodos_reales
             do_a, da_a, dv_a, dt_a = filtrar(periodo_ant)
             m_ant = calcular_metricas(do_a, da_a, dv_a, dt_a if ant_real else None)
         except:
@@ -610,7 +614,7 @@ try:
     for p in fechas_disp:
         try:
             do, da, dv, dt = filtrar(p)
-            real = pd.Timestamp(p) in periodos_reales
+            real = pd.Timestamp(p).to_period('M') in periodos_reales
             mh   = calcular_metricas(do, da, dv, dt if real else None)
             hist_rows.append({
                 'Período'    : p, 'Label': fmt_fecha(p),
