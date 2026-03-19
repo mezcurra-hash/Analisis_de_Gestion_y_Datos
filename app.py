@@ -388,6 +388,13 @@ if app_mode == "🏥  Oferta de Turnos":
         url = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQHFwl-Dxn-Rw9KN_evkCMk2Er8lQqgZMzAtN4LuEkWcCeBVUNwgb8xeIFKvpyxMgeGTeJ3oEWKpMZj/pub?gid=1524527213&single=true&output=csv"
         df = pd.read_csv(url)
         df.columns = df.columns.str.strip()
+        df = df.rename(columns={
+        'ATENDIDOS OPERADOR':      'ATENDIDOS_REDES',
+        'NO ATENDIDOS':            'NO_ATENDIDOS_REDES',
+        'TURNOS PRÁCTICAS (AS)':   'TURNOS_PRACT_REDES',
+        'TURNOS CONSULTORIOS (TS)':'TURNOS_CONS_REDES',
+        'TOTAL TURNOS':            'TURNOS_TOTAL_REDES',
+    })
         for col in ['SEDE','DEPARTAMENTO','SERVICIO']:
             if col in df.columns:
                 df[col] = df[col].astype(str).str.strip().str.upper()
