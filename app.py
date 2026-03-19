@@ -744,6 +744,21 @@ elif app_mode == "🎧  Call Center":
                 df[c] = pd.to_numeric(df[c].str.replace('.','',regex=False), errors='coerce').fillna(0)
         return df
 
+    @st.cache_data(ttl=300)
+    def cargar_datos_redes():
+        url = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQHFwl-Dxn-Rw9KN_evkCMk2Er8lQqgZMzAtN4LuEkWcCeBVUNwgb8xeIFKvpyxMgeGTeJ3oEWKpMZj/pub?gid=734059738&single=true&output=csv"
+        df = pd.read_csv(url)
+        df.columns = df.columns.str.strip()
+        df['FECHA_REAL'] = pd.to_datetime(df['MES'], dayfirst=True, errors='coerce')
+        df = df.dropna(subset=['FECHA_REAL']).sort_values('FECHA_REAL')
+        cols_num = ['INGRESADOS_REDES','ATENDIDOS_REDES','NO_ATENDIDOS_REDES',
+                    'TURNOS_PRACT_REDES','TURNOS_CONS_REDES','TURNOS_TOTAL_REDES']
+        for c in cols_num:
+            if c in df.columns:
+                df[c] = pd.to_numeric(df[c].astype(str).str.replace('.','',regex=False)
+                                          .str.replace(',','',regex=False), errors='coerce').fillna(0)
+        return df
+
     def parsear_fecha(txt):
         if pd.isna(txt): return None
         t = str(txt).lower().strip().replace(".", "")
@@ -756,44 +771,62 @@ elif app_mode == "🎧  Call Center":
         yr  = p[1] if len(p[1])==4 else "20"+p[1]
         return pd.Timestamp(year=int(yr), month=mes, day=1) if mes else None
 
+    # Corte de sistema: antes de Jul-2024 los turnos estaban unificados
+    CORTE_SISTEMAS = pd.Timestamp('2024-07-01')
+
     try:
-        df = cargar_datos_cc()
-        df['FECHA_REAL'] = df['MES'].apply(parsear_fecha)
-        df = df.dropna(subset=['FECHA_REAL']).sort_values('FECHA_REAL')
-        df['TOTAL_LLAMADAS']  = df['RECIBIDAS_FIN']  + df['RECIBIDAS_PREPAGO']
-        df['TOTAL_ATENDIDAS'] = df['ATENDIDAS_FIN']  + df['ATENDIDAS_PREPAGO']
-        df['TOTAL_PERDIDAS']  = df['PERDIDAS_FIN']   + df['PERDIDAS_PREPAGO']
+        df_tel   = cargar_datos_cc()
+        df_tel['FECHA_REAL'] = df_tel['MES'].apply(parsear_fecha)
+        df_tel = df_tel.dropna(subset=['FECHA_REAL']).sort_values('FECHA_REAL')
+        df_tel['TOTAL_LLAMADAS']  = df_tel['RECIBIDAS_FIN']  + df_tel['RECIBIDAS_PREPAGO']
+        df_tel['TOTAL_ATENDIDAS'] = df_tel['ATENDIDAS_FIN']  + df_tel['ATENDIDAS_PREPAGO']
+        df_tel['TOTAL_PERDIDAS']  = df_tel['PERDIDAS_FIN']   + df_tel['PERDIDAS_PREPAGO']
+        df_tel['SLA']             = (df_tel['TOTAL_ATENDIDAS'] / df_tel['TOTAL_LLAMADAS'] * 100).fillna(0)
+
+        df_red = cargar_datos_redes()
+        df_red['SLA_REDES'] = (df_red['ATENDIDOS_REDES'] / df_red['INGRESADOS_REDES'] * 100).fillna(0)
 
         with st.sidebar:
             st.markdown(f"<div style='font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:{TEXT_MUTED};margin-bottom:8px;'>VISTA</div>", unsafe_allow_html=True)
-            modo = st.radio("", ["📅  Mensual", "🔄  Interanual"], label_visibility="collapsed")
+            modo = st.radio("", ["📅  Mensual", "📱  Redes Sociales", "🔄  Interanual"],
+                            label_visibility="collapsed")
             st.markdown("<hr>", unsafe_allow_html=True)
-            segmento = st.selectbox("SEGMENTO", ["Unificado","Solo Financiadores","Solo Prepago"])
+            if "Mensual" in modo:
+                segmento = st.selectbox("SEGMENTO TELÉFONO",
+                                        ["Unificado","Solo Financiadores","Solo Prepago"])
 
-        st.markdown('<div class="section-header"><span class="section-title">🎧 Call Center</span></div>', unsafe_allow_html=True)
+        st.markdown('<div class="section-header"><span class="section-title">🎧 Call Center</span></div>',
+                    unsafe_allow_html=True)
 
-        # ── VISTA MENSUAL ────────────────────────────────────
+        # ══════════════════════════════════════════════════════
+        # VISTA MENSUAL — Teléfono + resumen combinado
+        # ══════════════════════════════════════════════════════
         if "Mensual" in modo:
-            fechas = sorted(df['FECHA_REAL'].unique(), reverse=True)
+            fechas = sorted(df_tel['FECHA_REAL'].unique(), reverse=True)
             sel    = st.selectbox("Período", fechas,
                                   format_func=lambda x: f"{MESES_FULL[x.month]} {x.year}")
 
-            d    = df[df['FECHA_REAL'] == sel].iloc[0]
-            d_ant = df[df['FECHA_REAL'] < sel].sort_values('FECHA_REAL').iloc[-1] if len(df[df['FECHA_REAL'] < sel]) > 0 else None
+            d     = df_tel[df_tel['FECHA_REAL'] == sel].iloc[0]
+            d_ant = df_tel[df_tel['FECHA_REAL'] < sel].sort_values('FECHA_REAL').iloc[-1] \
+                    if len(df_tel[df_tel['FECHA_REAL'] < sel]) > 0 else None
 
             if segmento == "Solo Financiadores":
                 rec, aten, perd = d['RECIBIDAS_FIN'], d['ATENDIDAS_FIN'], d['PERDIDAS_FIN']
-                rec_a, aten_a, perd_a = (d_ant['RECIBIDAS_FIN'], d_ant['ATENDIDAS_FIN'], d_ant['PERDIDAS_FIN']) if d_ant is not None else (0,0,0)
+                rec_a, aten_a, perd_a = (d_ant['RECIBIDAS_FIN'], d_ant['ATENDIDAS_FIN'],
+                                          d_ant['PERDIDAS_FIN']) if d_ant is not None else (0,0,0)
             elif segmento == "Solo Prepago":
                 rec, aten, perd = d['RECIBIDAS_PREPAGO'], d['ATENDIDAS_PREPAGO'], d['PERDIDAS_PREPAGO']
-                rec_a, aten_a, perd_a = (d_ant['RECIBIDAS_PREPAGO'], d_ant['ATENDIDAS_PREPAGO'], d_ant['PERDIDAS_PREPAGO']) if d_ant is not None else (0,0,0)
+                rec_a, aten_a, perd_a = (d_ant['RECIBIDAS_PREPAGO'], d_ant['ATENDIDAS_PREPAGO'],
+                                          d_ant['PERDIDAS_PREPAGO']) if d_ant is not None else (0,0,0)
             else:
                 rec, aten, perd = d['TOTAL_LLAMADAS'], d['TOTAL_ATENDIDAS'], d['TOTAL_PERDIDAS']
-                rec_a, aten_a, perd_a = (d_ant['TOTAL_LLAMADAS'], d_ant['TOTAL_ATENDIDAS'], d_ant['TOTAL_PERDIDAS']) if d_ant is not None else (0,0,0)
+                rec_a, aten_a, perd_a = (d_ant['TOTAL_LLAMADAS'], d_ant['TOTAL_ATENDIDAS'],
+                                          d_ant['TOTAL_PERDIDAS']) if d_ant is not None else (0,0,0)
 
             sla = (aten / rec * 100) if rec > 0 else 0
 
-            st.markdown(f'<div class="section-subtitle">Período seleccionado · <span class="badge">{MESES_FULL[sel.month]} {sel.year}</span></div>', unsafe_allow_html=True)
+            st.markdown(f'<div class="section-subtitle">📞 Teléfono · <span class="badge">{MESES_FULL[sel.month]} {sel.year}</span></div>',
+                        unsafe_allow_html=True)
 
             def delta_or_none(v, va): return (v-va, (v-va)/va*100) if va > 0 else (None, None)
 
@@ -801,7 +834,6 @@ elif app_mode == "🎧  Call Center":
             d1, p1 = delta_or_none(rec, rec_a)
             d2, p2 = delta_or_none(aten, aten_a)
             d3, p3 = delta_or_none(perd, perd_a)
-
             c1.markdown(kpi_card("Llamadas Recibidas", rec, d1, p1), unsafe_allow_html=True)
             c2.markdown(kpi_card("Atendidas", aten, d2, p2), unsafe_allow_html=True)
             c3.markdown(kpi_card("Abandonadas", perd, d3, p3), unsafe_allow_html=True)
@@ -814,105 +846,342 @@ elif app_mode == "🎧  Call Center":
 
             with col1:
                 fig_pie = go.Figure(go.Pie(
-                    labels=['Atendidas','Abandonadas'],
-                    values=[aten, perd],
-                    hole=0.55,
+                    labels=['Atendidas','Abandonadas'], values=[aten, perd], hole=0.55,
                     marker=dict(colors=[ACCENT, ACCENT2],
                                 line=dict(color='rgba(0,0,0,0)', width=0)),
-                    textinfo='percent+label',
-                    insidetextorientation='radial'
+                    textinfo='percent+label', insidetextorientation='radial'
                 ))
                 fig_pie.add_annotation(text=f"<b>{sla:.0f}%</b><br>SLA",
                                        x=0.5, y=0.5, showarrow=False,
                                        font=dict(size=18, color="#CDD6F4"))
-                apply_plotly_defaults(fig_pie, "Nivel de atención")
+                apply_plotly_defaults(fig_pie, "Nivel de atención — Teléfono")
                 st.plotly_chart(fig_pie, use_container_width=True)
 
             with col2:
-                turnos_data = {
-                    'Concepto': ['Consultorios', 'Prácticas', 'Total'],
-                    'Cantidad': [d['TURNOS_CONS_TEL'], d['TURNOS_PRACT_TEL'], d['TURNOS_TOTAL_TEL']],
-                }
+                turnos_data = {'Concepto': ['Consultorios','Prácticas','Total'],
+                               'Cantidad': [d['TURNOS_CONS_TEL'], d['TURNOS_PRACT_TEL'], d['TURNOS_TOTAL_TEL']]}
                 fig_t = px.bar(pd.DataFrame(turnos_data), x='Concepto', y='Cantidad',
-                               text='Cantidad',
-                               color='Concepto',
+                               text='Cantidad', color='Concepto',
                                color_discrete_map={'Consultorios': BLUE_LIGHT,
-                                                   'Prácticas': BLUE_DARK,
-                                                   'Total': ACCENT})
+                                                   'Prácticas': BLUE_DARK, 'Total': ACCENT})
                 fig_t.update_traces(texttemplate='%{text:,.0f}', textposition='outside',
                                     marker_line_width=0)
                 fig_t.update_layout(showlegend=False)
                 apply_plotly_defaults(fig_t, "Turnos gestionados por teléfono")
                 st.plotly_chart(fig_t, use_container_width=True)
 
-            # Evolución histórica del SLA
+            # ── Resumen combinado Teléfono + Redes ──────────
+            dr_sel = df_red[df_red['FECHA_REAL'] == sel]
+            if not dr_sel.empty:
+                dr = dr_sel.iloc[0]
+                st.markdown("<hr>", unsafe_allow_html=True)
+                st.markdown(f'<div class="section-subtitle">📊 Resumen combinado · Teléfono + Redes · <span class="badge">{MESES_FULL[sel.month]} {sel.year}</span></div>',
+                            unsafe_allow_html=True)
+
+                total_ing  = rec + dr['INGRESADOS_REDES']
+                total_aten = aten + dr['ATENDIDOS_REDES']
+                total_no   = perd + dr['NO_ATENDIDOS_REDES']
+                sla_comb   = (total_aten / total_ing * 100) if total_ing > 0 else 0
+
+                # Advertencia si cruzamos el corte de sistemas
+                if sel < CORTE_SISTEMAS:
+                    st.markdown(f"""
+                    <div class="insight-box insight-box-amber">
+                        ⚠️ <b>Nota metodológica:</b> Antes de Julio 2024 los canales estaban en un
+                        sistema unificado. El comparativo combinado pre Jul-2024 puede no reflejar
+                        la separación real entre teléfono y redes.
+                    </div>
+                    """, unsafe_allow_html=True)
+
+                cb1, cb2, cb3, cb4 = st.columns(4)
+                cb1.markdown(kpi_card("📞+📱 Total Contactos", total_ing), unsafe_allow_html=True)
+                cb2.markdown(kpi_card("✅ Total Atendidos", total_aten), unsafe_allow_html=True)
+                cb3.markdown(kpi_card("❌ Total No Atendidos", total_no), unsafe_allow_html=True)
+                cb4.markdown(kpi_card("📊 SLA Combinado", sla_comb, suffix="%"), unsafe_allow_html=True)
+
+                # Barras comparativas teléfono vs redes
+                st.markdown("<br>", unsafe_allow_html=True)
+                df_comp_bar = pd.DataFrame({
+                    'Canal'    : ['Teléfono','Teléfono','Redes','Redes'],
+                    'Tipo'     : ['Atendidos','No Atendidos','Atendidos','No Atendidos'],
+                    'Cantidad' : [aten, perd, dr['ATENDIDOS_REDES'], dr['NO_ATENDIDOS_REDES']],
+                })
+                fig_comp = px.bar(df_comp_bar, x='Canal', y='Cantidad', color='Tipo',
+                                  barmode='stack', text='Cantidad',
+                                  color_discrete_map={'Atendidos': ACCENT, 'No Atendidos': ACCENT2})
+                fig_comp.update_traces(texttemplate='%{text:,.0f}', textposition='inside',
+                                       marker_line_width=0)
+                apply_plotly_defaults(fig_comp, "Contactos por canal — comparativa")
+                fig_comp.update_layout(height=320)
+                st.plotly_chart(fig_comp, use_container_width=True)
+
+                # Turnos combinados (solo desde Jul-2024)
+                if sel >= CORTE_SISTEMAS:
+                    st.markdown("<br>", unsafe_allow_html=True)
+                    turnos_comb = pd.DataFrame({
+                        'Concepto' : ['Cons. Tel','Cons. Redes','Práct. Tel','Práct. Redes','Total Tel','Total Redes'],
+                        'Cantidad' : [d['TURNOS_CONS_TEL'], dr['TURNOS_CONS_REDES'],
+                                      d['TURNOS_PRACT_TEL'], dr['TURNOS_PRACT_REDES'],
+                                      d['TURNOS_TOTAL_TEL'], dr['TURNOS_TOTAL_REDES']],
+                        'Canal'    : ['Teléfono','Redes','Teléfono','Redes','Teléfono','Redes'],
+                    })
+                    fig_tc = px.bar(turnos_comb, x='Concepto', y='Cantidad', color='Canal',
+                                    text='Cantidad', barmode='group',
+                                    color_discrete_map={'Teléfono': BLUE_LIGHT, 'Redes': ACCENT3})
+                    fig_tc.update_traces(texttemplate='%{text:,.0f}', textposition='outside',
+                                         marker_line_width=0)
+                    apply_plotly_defaults(fig_tc, "Turnos por canal")
+                    fig_tc.update_layout(height=320)
+                    st.plotly_chart(fig_tc, use_container_width=True)
+
+            # ── Evolución histórica ───────────────────────────
             st.markdown("<hr>", unsafe_allow_html=True)
-            df['SLA'] = (df['TOTAL_ATENDIDAS'] / df['TOTAL_LLAMADAS'] * 100).fillna(0)
             fig_evo = go.Figure()
-            fig_evo.add_trace(go.Scatter(
-                x=df['FECHA_REAL'], y=df['TOTAL_LLAMADAS'],
-                name='Recibidas', fill='tozeroy',
-                line=dict(color=BLUE_LIGHT, width=2),
-                fillcolor=f"rgba(79,195,247,0.15)"
-            ))
-            fig_evo.add_trace(go.Scatter(
-                x=df['FECHA_REAL'], y=df['TOTAL_ATENDIDAS'],
-                name='Atendidas', fill='tozeroy',
-                line=dict(color=ACCENT, width=2),
-                fillcolor=f"rgba(0,191,165,0.2)"
-            ))
-            fig_evo.add_trace(go.Scatter(
-                x=df['FECHA_REAL'], y=df['TOTAL_PERDIDAS'],
-                name='Abandonadas', line=dict(color=ACCENT2, width=2, dash='dot'),
-            ))
-            apply_plotly_defaults(fig_evo, "Evolución histórica de llamadas")
-            fig_evo.update_layout(height=280)
+            fig_evo.add_trace(go.Scatter(x=df_tel['FECHA_REAL'], y=df_tel['TOTAL_LLAMADAS'],
+                name='Recibidas Tel', fill='tozeroy',
+                line=dict(color=BLUE_LIGHT, width=2), fillcolor="rgba(79,195,247,0.15)"))
+            fig_evo.add_trace(go.Scatter(x=df_tel['FECHA_REAL'], y=df_tel['TOTAL_ATENDIDAS'],
+                name='Atendidas Tel', fill='tozeroy',
+                line=dict(color=ACCENT, width=2), fillcolor="rgba(0,191,165,0.2)"))
+            if not df_red.empty:
+                fig_evo.add_trace(go.Scatter(x=df_red['FECHA_REAL'], y=df_red['INGRESADOS_REDES'],
+                    name='Ingresados Redes', line=dict(color=ACCENT3, width=2, dash='dot'),
+                    mode='lines'))
+                fig_evo.add_trace(go.Scatter(x=df_red['FECHA_REAL'], y=df_red['ATENDIDOS_REDES'],
+                    name='Atendidos Redes', line=dict(color=ACCENT3, width=2),
+                    mode='lines'))
+            fig_evo.add_vline(x=CORTE_SISTEMAS.timestamp()*1000, line_width=1,
+                              line_dash="dash", line_color=TEXT_MUTED,
+                              annotation_text="  Jul-2024: separación de sistemas",
+                              annotation_font_color=TEXT_MUTED,
+                              annotation_position="top right")
+            apply_plotly_defaults(fig_evo, "Evolución histórica de contactos — Teléfono y Redes")
+            fig_evo.update_layout(height=300)
             st.plotly_chart(fig_evo, use_container_width=True)
 
-        # ── VISTA INTERANUAL ─────────────────────────────────
+        # ══════════════════════════════════════════════════════
+        # VISTA REDES SOCIALES
+        # ══════════════════════════════════════════════════════
+        elif "Redes" in modo:
+            if df_red.empty:
+                st.warning("No hay datos de redes cargados.")
+                st.stop()
+
+            fechas_r = sorted(df_red['FECHA_REAL'].unique(), reverse=True)
+            sel_r    = st.selectbox("Período", fechas_r,
+                                    format_func=lambda x: f"{MESES_FULL[x.month]} {x.year}")
+
+            dr     = df_red[df_red['FECHA_REAL'] == sel_r].iloc[0]
+            dr_ant = df_red[df_red['FECHA_REAL'] < sel_r].sort_values('FECHA_REAL').iloc[-1] \
+                     if len(df_red[df_red['FECHA_REAL'] < sel_r]) > 0 else None
+
+            ing  = dr['INGRESADOS_REDES']
+            aten = dr['ATENDIDOS_REDES']
+            no_a = dr['NO_ATENDIDOS_REDES']
+            sla_r = (aten / ing * 100) if ing > 0 else 0
+
+            ing_a  = dr_ant['INGRESADOS_REDES']  if dr_ant is not None else 0
+            aten_a = dr_ant['ATENDIDOS_REDES']   if dr_ant is not None else 0
+            no_a_a = dr_ant['NO_ATENDIDOS_REDES'] if dr_ant is not None else 0
+
+            st.markdown(f'<div class="section-subtitle">📱 Redes Sociales · <span class="badge">{MESES_FULL[sel_r.month]} {sel_r.year}</span></div>',
+                        unsafe_allow_html=True)
+
+            if sel_r < CORTE_SISTEMAS:
+                st.markdown(f"""
+                <div class="insight-box insight-box-amber">
+                    ⚠️ <b>Nota metodológica:</b> Antes de Julio 2024 los turnos de redes y teléfono
+                    estaban en un sistema unificado. Los datos de turnos por canal no están disponibles
+                    para este período.
+                </div>
+                """, unsafe_allow_html=True)
+
+            def dn(v, va): return (v-va, (v-va)/va*100) if va > 0 else (None, None)
+
+            c1,c2,c3,c4 = st.columns(4)
+            d1,p1 = dn(ing, ing_a)
+            d2,p2 = dn(aten, aten_a)
+            d3,p3 = dn(no_a, no_a_a)
+            c1.markdown(kpi_card("📱 Contactos Ingresados", ing, d1, p1), unsafe_allow_html=True)
+            c2.markdown(kpi_card("✅ Atendidos por Operador", aten, d2, p2), unsafe_allow_html=True)
+            c3.markdown(kpi_card("❌ No Atendidos", no_a, d3, p3), unsafe_allow_html=True)
+            c4.markdown(kpi_card("📊 Nivel de Atención", sla_r, suffix="%"), unsafe_allow_html=True)
+            if sla_r < 90:
+                c4.error(f"⚠️ Bajo meta — {sla_r:.1f}% < 90%")
+
+            st.markdown("<br>", unsafe_allow_html=True)
+            col1, col2 = st.columns(2)
+
+            with col1:
+                fig_pie = go.Figure(go.Pie(
+                    labels=['Atendidos','No Atendidos'], values=[aten, no_a], hole=0.55,
+                    marker=dict(colors=[ACCENT3, ACCENT2],
+                                line=dict(color='rgba(0,0,0,0)', width=0)),
+                    textinfo='percent+label', insidetextorientation='radial'
+                ))
+                fig_pie.add_annotation(text=f"<b>{sla_r:.0f}%</b><br>Atención",
+                                       x=0.5, y=0.5, showarrow=False,
+                                       font=dict(size=18, color="#CDD6F4"))
+                apply_plotly_defaults(fig_pie, "Nivel de atención — Redes")
+                st.plotly_chart(fig_pie, use_container_width=True)
+
+            with col2:
+                if sel_r >= CORTE_SISTEMAS:
+                    t_pract = dr['TURNOS_PRACT_REDES']
+                    t_cons  = dr['TURNOS_CONS_REDES']
+                    t_tot   = dr['TURNOS_TOTAL_REDES']
+                    turnos_r = {'Concepto': ['Consultorios','Prácticas','Total'],
+                                'Cantidad': [t_cons, t_pract, t_tot]}
+                    fig_tr = px.bar(pd.DataFrame(turnos_r), x='Concepto', y='Cantidad',
+                                    text='Cantidad', color='Concepto',
+                                    color_discrete_map={'Consultorios': ACCENT3,
+                                                        'Prácticas': '#FF8F00', 'Total': ACCENT})
+                    fig_tr.update_traces(texttemplate='%{text:,.0f}', textposition='outside',
+                                         marker_line_width=0)
+                    fig_tr.update_layout(showlegend=False)
+                    apply_plotly_defaults(fig_tr, "Turnos gestionados por redes")
+                    st.plotly_chart(fig_tr, use_container_width=True)
+                else:
+                    st.info("Datos de turnos por canal disponibles desde Julio 2024.")
+
+            # Evolución histórica redes
+            st.markdown("<hr>", unsafe_allow_html=True)
+            fig_evo_r = go.Figure()
+            fig_evo_r.add_trace(go.Scatter(x=df_red['FECHA_REAL'], y=df_red['INGRESADOS_REDES'],
+                name='Ingresados', fill='tozeroy',
+                line=dict(color=ACCENT3, width=2), fillcolor='rgba(255,183,77,0.15)'))
+            fig_evo_r.add_trace(go.Scatter(x=df_red['FECHA_REAL'], y=df_red['ATENDIDOS_REDES'],
+                name='Atendidos', fill='tozeroy',
+                line=dict(color=ACCENT, width=2), fillcolor='rgba(0,191,165,0.2)'))
+            fig_evo_r.add_trace(go.Scatter(x=df_red['FECHA_REAL'], y=df_red['NO_ATENDIDOS_REDES'],
+                name='No Atendidos', line=dict(color=ACCENT2, width=2, dash='dot')))
+            fig_evo_r.add_vline(x=CORTE_SISTEMAS.timestamp()*1000, line_width=1,
+                                line_dash="dash", line_color=TEXT_MUTED,
+                                annotation_text="  Jul-2024: separación de sistemas",
+                                annotation_font_color=TEXT_MUTED, annotation_position="top right")
+            apply_plotly_defaults(fig_evo_r, "Evolución histórica — Redes Sociales")
+            fig_evo_r.update_layout(height=300)
+            st.plotly_chart(fig_evo_r, use_container_width=True)
+
+            # Evolución de turnos por redes (solo desde Jul-2024)
+            df_red_post = df_red[df_red['FECHA_REAL'] >= CORTE_SISTEMAS]
+            if not df_red_post.empty and 'TURNOS_TOTAL_REDES' in df_red_post.columns:
+                st.markdown("<hr>", unsafe_allow_html=True)
+                fig_trn = go.Figure()
+                fig_trn.add_trace(go.Scatter(x=df_red_post['FECHA_REAL'],
+                    y=df_red_post['TURNOS_CONS_REDES'], name='Consultorios',
+                    line=dict(color=ACCENT3, width=2), mode='lines+markers'))
+                fig_trn.add_trace(go.Scatter(x=df_red_post['FECHA_REAL'],
+                    y=df_red_post['TURNOS_PRACT_REDES'], name='Prácticas',
+                    line=dict(color='#FF8F00', width=2), mode='lines+markers'))
+                fig_trn.add_trace(go.Scatter(x=df_red_post['FECHA_REAL'],
+                    y=df_red_post['TURNOS_TOTAL_REDES'], name='Total',
+                    line=dict(color=ACCENT, width=2, dash='dot'), mode='lines+markers'))
+                apply_plotly_defaults(fig_trn, "Evolución de turnos gestionados por redes (desde Jul-2024)")
+                fig_trn.update_layout(height=280)
+                st.plotly_chart(fig_trn, use_container_width=True)
+
+            with st.expander("Ver datos históricos de redes"):
+                st.dataframe(df_red[['FECHA_REAL','INGRESADOS_REDES','ATENDIDOS_REDES',
+                                     'NO_ATENDIDOS_REDES','TURNOS_PRACT_REDES',
+                                     'TURNOS_CONS_REDES','TURNOS_TOTAL_REDES','SLA_REDES']]
+                             .style.format({'INGRESADOS_REDES':'{:,.0f}','ATENDIDOS_REDES':'{:,.0f}',
+                                            'NO_ATENDIDOS_REDES':'{:,.0f}','TURNOS_PRACT_REDES':'{:,.0f}',
+                                            'TURNOS_CONS_REDES':'{:,.0f}','TURNOS_TOTAL_REDES':'{:,.0f}',
+                                            'SLA_REDES':'{:.1f}%'}),
+                             use_container_width=True)
+
+        # ══════════════════════════════════════════════════════
+        # VISTA INTERANUAL
+        # ══════════════════════════════════════════════════════
         else:
-            st.markdown(f'<div class="section-subtitle">Mismo mes en distintos años</div>', unsafe_allow_html=True)
-            mes_nom = st.selectbox("Mes a comparar", list(MESES_FULL.values()))
-            m_num   = list(MESES_FULL.values()).index(mes_nom) + 1
-            df_i    = df[df['FECHA_REAL'].dt.month == m_num].copy()
+            st.markdown(f'<div class="section-subtitle">Mismo mes en distintos años</div>',
+                        unsafe_allow_html=True)
 
-            if df_i.empty:
-                st.warning("Sin datos históricos para este mes.")
-            else:
-                df_i['AÑO'] = df_i['FECHA_REAL'].dt.year.astype(str)
-                df_i['SLA'] = (df_i['TOTAL_ATENDIDAS'] / df_i['TOTAL_LLAMADAS'] * 100).fillna(0)
+            canal_int = st.radio("Canal:", ["📞 Teléfono","📱 Redes","📊 Combinado"], horizontal=True)
+            mes_nom   = st.selectbox("Mes a comparar", list(MESES_FULL.values()))
+            m_num     = list(MESES_FULL.values()).index(mes_nom) + 1
 
-                fig = go.Figure()
-                fig.add_trace(go.Bar(x=df_i['AÑO'], y=df_i['TOTAL_ATENDIDAS'],
-                                     name='Atendidas', marker_color=ACCENT,
-                                     text=df_i['TOTAL_ATENDIDAS'], texttemplate='%{text:,.0f}'))
-                fig.add_trace(go.Bar(x=df_i['AÑO'], y=df_i['TOTAL_PERDIDAS'],
-                                     name='Abandonadas', marker_color=ACCENT2,
-                                     text=df_i['TOTAL_PERDIDAS'], texttemplate='%{text:,.0f}'))
-                fig.add_trace(go.Scatter(x=df_i['AÑO'], y=df_i['SLA'],
-                                         name='SLA %', yaxis='y2',
-                                         line=dict(color=ACCENT3, width=3),
-                                         mode='lines+markers+text',
-                                         text=df_i['SLA'].apply(lambda x: f"{x:.0f}%"),
-                                         textposition='top center'))
-                apply_plotly_defaults(fig, f"Desempeño en {mes_nom} — comparativa interanual")
-                fig.update_layout(
-                    barmode='group',
-                    yaxis2=dict(overlaying='y', side='right', showgrid=False,
-                                title='SLA %', color=ACCENT3),
-                    height=400
-                )
-                st.plotly_chart(fig, use_container_width=True)
+            if "Teléfono" in canal_int:
+                df_i = df_tel[df_tel['FECHA_REAL'].dt.month == m_num].copy()
+                if df_i.empty:
+                    st.warning("Sin datos históricos para este mes.")
+                else:
+                    df_i['AÑO'] = df_i['FECHA_REAL'].dt.year.astype(str)
+                    fig = go.Figure()
+                    fig.add_trace(go.Bar(x=df_i['AÑO'], y=df_i['TOTAL_ATENDIDAS'],
+                        name='Atendidas', marker_color=ACCENT,
+                        text=df_i['TOTAL_ATENDIDAS'], texttemplate='%{text:,.0f}'))
+                    fig.add_trace(go.Bar(x=df_i['AÑO'], y=df_i['TOTAL_PERDIDAS'],
+                        name='Abandonadas', marker_color=ACCENT2,
+                        text=df_i['TOTAL_PERDIDAS'], texttemplate='%{text:,.0f}'))
+                    fig.add_trace(go.Scatter(x=df_i['AÑO'], y=df_i['SLA'],
+                        name='SLA %', yaxis='y2',
+                        line=dict(color=ACCENT3, width=3), mode='lines+markers+text',
+                        text=df_i['SLA'].apply(lambda x: f"{x:.0f}%"),
+                        textposition='top center'))
+                    apply_plotly_defaults(fig, f"Teléfono — {mes_nom} · comparativa interanual")
+                    fig.update_layout(barmode='group', height=400,
+                        yaxis2=dict(overlaying='y', side='right', showgrid=False,
+                                    title='SLA %', color=ACCENT3))
+                    st.plotly_chart(fig, use_container_width=True)
 
-                with st.expander("Ver datos históricos"):
-                    st.dataframe(df_i[['AÑO','TOTAL_LLAMADAS','TOTAL_ATENDIDAS','TOTAL_PERDIDAS','SLA']]
-                                 .style.format({'TOTAL_LLAMADAS':'{:,.0f}','TOTAL_ATENDIDAS':'{:,.0f}',
-                                                'TOTAL_PERDIDAS':'{:,.0f}','SLA':'{:.1f}%'}),
-                                 use_container_width=True)
+            elif "Redes" in canal_int:
+                df_i = df_red[df_red['FECHA_REAL'].dt.month == m_num].copy()
+                if df_i.empty:
+                    st.warning("Sin datos de redes para este mes.")
+                else:
+                    df_i['AÑO'] = df_i['FECHA_REAL'].dt.year.astype(str)
+                    fig = go.Figure()
+                    fig.add_trace(go.Bar(x=df_i['AÑO'], y=df_i['ATENDIDOS_REDES'],
+                        name='Atendidos', marker_color=ACCENT3,
+                        text=df_i['ATENDIDOS_REDES'], texttemplate='%{text:,.0f}'))
+                    fig.add_trace(go.Bar(x=df_i['AÑO'], y=df_i['NO_ATENDIDOS_REDES'],
+                        name='No Atendidos', marker_color=ACCENT2,
+                        text=df_i['NO_ATENDIDOS_REDES'], texttemplate='%{text:,.0f}'))
+                    fig.add_trace(go.Scatter(x=df_i['AÑO'], y=df_i['SLA_REDES'],
+                        name='Atención %', yaxis='y2',
+                        line=dict(color=ACCENT, width=3), mode='lines+markers+text',
+                        text=df_i['SLA_REDES'].apply(lambda x: f"{x:.0f}%"),
+                        textposition='top center'))
+                    apply_plotly_defaults(fig, f"Redes — {mes_nom} · comparativa interanual")
+                    fig.update_layout(barmode='group', height=400,
+                        yaxis2=dict(overlaying='y', side='right', showgrid=False,
+                                    title='Atención %', color=ACCENT))
+                    st.plotly_chart(fig, use_container_width=True)
+
+            else:  # Combinado
+                df_it = df_tel[df_tel['FECHA_REAL'].dt.month == m_num].copy()
+                df_ir = df_red[df_red['FECHA_REAL'].dt.month == m_num].copy()
+                if df_it.empty and df_ir.empty:
+                    st.warning("Sin datos para este mes.")
+                else:
+                    df_it['AÑO'] = df_it['FECHA_REAL'].dt.year.astype(str)
+                    df_ir['AÑO'] = df_ir['FECHA_REAL'].dt.year.astype(str)
+                    fig = go.Figure()
+                    if not df_it.empty:
+                        fig.add_trace(go.Bar(x=df_it['AÑO'], y=df_it['TOTAL_ATENDIDAS'],
+                            name='Atendidas Tel', marker_color=ACCENT,
+                            text=df_it['TOTAL_ATENDIDAS'], texttemplate='%{text:,.0f}'))
+                    if not df_ir.empty:
+                        fig.add_trace(go.Bar(x=df_ir['AÑO'], y=df_ir['ATENDIDOS_REDES'],
+                            name='Atendidos Redes', marker_color=ACCENT3,
+                            text=df_ir['ATENDIDOS_REDES'], texttemplate='%{text:,.0f}'))
+                    if pd.Timestamp(f"{min(df_it['FECHA_REAL'].dt.year.min() if not df_it.empty else 9999, df_ir['FECHA_REAL'].dt.year.min() if not df_ir.empty else 9999)}-{m_num:02d}-01") < CORTE_SISTEMAS:
+                        st.markdown(f"""
+                        <div class="insight-box insight-box-amber">
+                            ⚠️ Antes de Julio 2024 los canales estaban unificados — la comparativa
+                            interanual puede no ser homogénea para años anteriores a 2024.
+                        </div>
+                        """, unsafe_allow_html=True)
+                    apply_plotly_defaults(fig, f"Combinado — {mes_nom} · comparativa interanual")
+                    fig.update_layout(barmode='group', height=400)
+                    st.plotly_chart(fig, use_container_width=True)
 
     except Exception as e:
         st.error(f"❌ Error en Call Center: {e}")
         st.exception(e)
+
 
 
 # ============================================================
