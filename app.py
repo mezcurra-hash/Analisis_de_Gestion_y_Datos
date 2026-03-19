@@ -171,7 +171,7 @@ def cargar_datos():
 
     # BD_TURNOS_DADOS — reemplazá TURNOS_DADOS_GID con el gid real de tu hoja
     try:
-        df_td = pd.read_csv(f"{BASE}/pub?gid=TURNOS_DADOS_GID&single=true&output=csv")
+        df_td = pd.read_csv(f"{BASE}/pub?gid=1285454147&single=true&output=csv")
     except Exception:
         df_td = pd.DataFrame(columns=['PERIODO','SERVICIO','TURNO_DADOS'])
 
