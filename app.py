@@ -539,11 +539,11 @@ if app_mode == "🏥  Oferta de Turnos":
 
                 serie_completa = df_hist.groupby('PERIODO')[metrica_t].sum().reset_index().sort_values('PERIODO')
 
-                # ── Separar meses cerrados de meses futuros ──────────
-                # Solo usamos meses ya cerrados (antes del mes en curso) para la regresión
-                # Esto evita el artefacto de mezclar AP+ANP (pasado) con solo AP (futuro)
+                # Separar meses cerrados de meses futuros
+                # El mes en curso se incluye en el histórico (ya tiene datos cargados)
+                # La proyección arranca desde el mes siguiente al actual
                 hoy          = pd.Timestamp.today().normalize()
-                corte        = hoy.replace(day=1)  # Primer día del mes actual
+                corte        = (hoy.replace(day=1) + pd.DateOffset(months=1))  # Primer día del mes siguiente
                 serie_pasada = serie_completa[serie_completa['PERIODO'] < corte]
                 serie_futura = serie_completa[serie_completa['PERIODO'] >= corte]
 
