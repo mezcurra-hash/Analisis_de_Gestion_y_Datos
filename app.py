@@ -515,8 +515,9 @@ if app_mode == "🏥  Oferta de Turnos":
             with tab_tabla:
                 tabla = pd.pivot_table(df_f, index=filas_sel, values=val_sel,
                                        aggfunc='sum', margins=True, margins_name='TOTAL')
+                tabla = tabla.fillna(0)
                 st.dataframe(
-                    tabla.style.format("{:,.0f}").background_gradient(cmap='Blues'),
+                    tabla.style.format("{:,.0f}").bar(color=BLUE_LIGHT),
                     use_container_width=True
                 )
                 st.markdown("<br>", unsafe_allow_html=True)
@@ -527,65 +528,84 @@ if app_mode == "🏥  Oferta de Turnos":
                 )
 
             with tab_trend:
-                # ── Proyección de tendencia lineal ──────────────
                 metrica_t = val_sel[0]
-                # Serie histórica completa (sin filtro de período)
+
+                # Serie completa — aplicar filtros pero NO filtro de período
                 df_hist = df.copy()
                 if filtro_tipo == "AP"  and 'TIPO_ATENCION' in df_hist.columns: df_hist = df_hist[df_hist['TIPO_ATENCION']=='AP']
                 if filtro_tipo == "ANP" and 'TIPO_ATENCION' in df_hist.columns: df_hist = df_hist[df_hist['TIPO_ATENCION']=='ANP']
                 if depto: df_hist = df_hist[df_hist['DEPARTAMENTO'].isin(depto)]
                 if serv:  df_hist = df_hist[df_hist['SERVICIO'].isin(serv)]
 
-                serie = df_hist.groupby('PERIODO')[metrica_t].sum().reset_index().sort_values('PERIODO')
+                serie_completa = df_hist.groupby('PERIODO')[metrica_t].sum().reset_index().sort_values('PERIODO')
 
-                if len(serie) < 3:
-                    st.info("Se necesitan al menos 3 períodos históricos para calcular la tendencia.")
+                # ── Separar meses cerrados de meses futuros ──────────
+                # Solo usamos meses ya cerrados (antes del mes en curso) para la regresión
+                # Esto evita el artefacto de mezclar AP+ANP (pasado) con solo AP (futuro)
+                hoy          = pd.Timestamp.today().normalize()
+                corte        = hoy.replace(day=1)  # Primer día del mes actual
+                serie_pasada = serie_completa[serie_completa['PERIODO'] < corte]
+                serie_futura = serie_completa[serie_completa['PERIODO'] >= corte]
+
+                if len(serie_pasada) < 3:
+                    st.info("Se necesitan al menos 3 meses cerrados para calcular la tendencia.")
                 else:
-                    # Regresión lineal con numpy
-                    x = np.arange(len(serie))
-                    y = serie[metrica_t].values
+                    # Regresión lineal SOLO sobre meses cerrados
+                    x    = np.arange(len(serie_pasada))
+                    y    = serie_pasada[metrica_t].values
                     coef = np.polyfit(x, y, 1)
                     poly = np.poly1d(coef)
 
-                    # Proyectar 3 meses hacia adelante
-                    N_PROJ = 3
-                    ultimo_mes = serie['PERIODO'].max()
-                    fechas_proj = [ultimo_mes + pd.DateOffset(months=i+1) for i in range(N_PROJ)]
-                    x_proj = np.arange(len(serie), len(serie) + N_PROJ)
-                    y_proj = poly(x_proj)
+                    # Proyección: 3 meses desde el último mes cerrado
+                    N_PROJ      = 3
+                    ultimo_cerrado = serie_pasada['PERIODO'].max()
+                    fechas_proj = [ultimo_cerrado + pd.DateOffset(months=i+1) for i in range(N_PROJ)]
+                    x_proj      = np.arange(len(serie_pasada), len(serie_pasada) + N_PROJ)
+                    y_proj      = poly(x_proj)
 
                     fig_t = go.Figure()
-                    # Línea histórica real
+
+                    # 1. Histórico real (meses cerrados)
                     fig_t.add_trace(go.Scatter(
-                        x=serie['PERIODO'], y=serie[metrica_t],
-                        name='Histórico', mode='lines+markers',
+                        x=serie_pasada['PERIODO'], y=serie_pasada[metrica_t],
+                        name='Histórico (cerrado)', mode='lines+markers',
                         line=dict(color=BLUE_LIGHT, width=2),
                         marker=dict(size=6),
                         fill='tozeroy', fillcolor='rgba(79,195,247,0.1)',
                     ))
-                    # Línea de tendencia sobre histórico
+
+                    # 2. Oferta futura cargada (AP solamente — referencia visual, no entra en regresión)
+                    if not serie_futura.empty:
+                        fig_t.add_trace(go.Scatter(
+                            x=serie_futura['PERIODO'], y=serie_futura[metrica_t],
+                            name='Oferta futura (AP cargada)', mode='lines+markers',
+                            line=dict(color=BLUE_LIGHT, width=2, dash='dot'),
+                            marker=dict(size=6, symbol='circle-open'),
+                            opacity=0.5,
+                        ))
+
+                    # 3. Línea de tendencia sobre el histórico cerrado
                     fig_t.add_trace(go.Scatter(
-                        x=serie['PERIODO'], y=poly(x),
+                        x=serie_pasada['PERIODO'], y=poly(x),
                         name='Tendencia', mode='lines',
                         line=dict(color=ACCENT3, width=2, dash='dot'),
                     ))
-                    # Proyección futura
-                    # Conectar último punto real con proyección
-                    x_ext = [serie['PERIODO'].iloc[-1]] + fechas_proj
-                    y_ext = [float(poly(len(serie)-1))] + list(y_proj)
+
+                    # 4. Proyección desde último mes cerrado hacia adelante
+                    x_ext = [ultimo_cerrado] + fechas_proj
+                    y_ext = [float(poly(len(serie_pasada)-1))] + list(y_proj)
                     fig_t.add_trace(go.Scatter(
                         x=x_ext, y=y_ext,
-                        name='Proyección', mode='lines+markers',
+                        name='Proyección (regresión)', mode='lines+markers',
                         line=dict(color=ACCENT2, width=2, dash='dash'),
                         marker=dict(size=8, symbol='diamond'),
                         fill='tozeroy', fillcolor='rgba(255,107,107,0.08)',
                     ))
-                    # Línea vertical con la fecha real de hoy
-                    hoy = pd.Timestamp.today().normalize()
+
+                    # 5. Línea vertical "Hoy"
                     fig_t.add_vline(
                         x=hoy.timestamp() * 1000,
-                        line_width=1, line_dash="dot",
-                        line_color=ACCENT,
+                        line_width=1, line_dash="dot", line_color=ACCENT,
                         annotation_text=f"  Hoy ({MESES_FULL[hoy.month]} {hoy.year})",
                         annotation_font_color=ACCENT,
                         annotation_position="top right",
@@ -593,21 +613,25 @@ if app_mode == "🏥  Oferta de Turnos":
 
                     pendiente_dir = "creciente 📈" if coef[0] > 0 else "decreciente 📉"
                     apply_plotly_defaults(fig_t, f"Tendencia y proyección · {metrica_t.replace('_',' ').title()}")
-                    fig_t.update_layout(height=400)
+                    fig_t.update_layout(height=420)
                     st.plotly_chart(fig_t, use_container_width=True)
 
-                    # Resumen de proyección
+                    # Tarjetas de proyección
                     cols_p = st.columns(N_PROJ)
                     for i, (fp, yp) in enumerate(zip(fechas_proj, y_proj)):
                         label_p = f"{MESES_FULL[fp.month]} {fp.year}"
                         cols_p[i].markdown(kpi_card(f"Proyección {label_p}", max(0, yp)), unsafe_allow_html=True)
 
+                    n_meses_usados = len(serie_pasada)
                     st.markdown(f"""
                     <div style="margin-top:12px; padding:10px 14px; background:{CARD_BG};
                                 border:1px solid {BORDER}; border-radius:8px; font-size:12px; color:{TEXT_MUTED};">
-                        <b style="color:#CDD6F4;">Método:</b> Regresión lineal (mínimos cuadrados) · 
-                        Tendencia <b style="color:#CDD6F4;">{pendiente_dir}</b> · 
+                        <b style="color:#CDD6F4;">Método:</b> Regresión lineal (mínimos cuadrados) ·
+                        Basada en <b style="color:#CDD6F4;">{n_meses_usados} meses cerrados</b> ·
+                        Tendencia <b style="color:#CDD6F4;">{pendiente_dir}</b> ·
                         Pendiente: <b style="color:#CDD6F4;">{coef[0]:+,.0f} turnos/mes</b>
+                        <br><span style="font-size:11px;">⚠️ La oferta futura mostrada (línea punteada azul) incluye solo AP —
+                        la ANP se agrega al inicio de cada mes.</span>
                     </div>
                     """, unsafe_allow_html=True)
 
