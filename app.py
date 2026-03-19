@@ -746,7 +746,7 @@ elif app_mode == "🎧  Call Center":
 
     @st.cache_data(ttl=300)
     def cargar_datos_redes():
-        url = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQHFwl-Dxn-Rw9KN_evkCMk2Er8lQqgZMzAtN4LuEkWcCeBVUNwgb8xeIFKvpyxMgeGTeJ3oEWKpMZj/pub?gid=734059738&single=true&output=csv"
+        url = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTOxpr7RRNTLGO96pUK8HJ0iy2ZHeqNpiR7OelleljCVoWPuJCO26q5z66VisWB76khl7Tmsqh5CqNC/pub?gid=734059738&single=true&output=csv"
         df = pd.read_csv(url)
         df.columns = df.columns.str.strip()
         df['FECHA_REAL'] = pd.to_datetime(df['MES'], dayfirst=True, errors='coerce')
