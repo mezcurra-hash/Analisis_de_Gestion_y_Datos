@@ -169,10 +169,11 @@ def cargar_datos():
     df_au  = pd.read_csv(f"{BASE}/pub?gid=2132722842&single=true&output=csv")
     df_val = pd.read_csv(f"{BASE}/pub?gid=554651129&single=true&output=csv")
 
-    # BD_TURNOS_DADOS — reemplazá TURNOS_DADOS_GID con el gid real de tu hoja
+    # BD_TURNOS_DADOS — URL completo publicado desde Google Sheets
     try:
-        df_td = pd.read_csv(f"{BASE}/pub?gid=1285454147&single=true&output=csv")
-    except Exception:
+        df_td = pd.read_csv("https://docs.google.com/spreadsheets/d/e/2PACX-1vQHFwl-Dxn-Rw9KN_evkCMk2Er8lQqgZMzAtN4LuEkWcCeBVUNwgb8xeIFKvpyxMgeGTeJ3oEWKpMZj/pub?gid=1285454147&single=true&output=csv")
+    except Exception as e:
+        st.warning(f"⚠️ No se pudo cargar BD_TURNOS_DADOS: {e}")
         df_td = pd.DataFrame(columns=['PERIODO','SERVICIO','TURNO_DADOS'])
 
     for df in [df_of, df_au, df_val, df_td]:
