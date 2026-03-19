@@ -309,6 +309,18 @@ with st.sidebar:
     st.markdown("<hr>", unsafe_allow_html=True)
     st.markdown(f"<div style='font-size:11px;color:{TEXT_MUTED};'>Datos actualizados cada 5 min.</div>", unsafe_allow_html=True)
 
+    # ── DEBUG TEMPORAL ──────────────────────────────────────
+    with st.expander("🔍 Debug BD_TURNOS_DADOS"):
+        st.write(f"tiene_td: {tiene_td}")
+        st.write(f"filas: {len(df_turnos_dados)}")
+        st.write(f"columnas: {list(df_turnos_dados.columns)}")
+        if not df_turnos_dados.empty:
+            st.write(f"períodos encontrados: {sorted(df_turnos_dados['PERIODO'].dropna().unique())}")
+            st.write(f"periodos_reales (Period): {sorted(periodos_reales)}")
+            st.write(f"periodo_sel: {periodo_sel} → Period: {pd.Timestamp(periodo_sel).to_period('M')}")
+            st.write(f"es_dato_real: {es_dato_real}")
+            st.dataframe(df_turnos_dados.head(5))
+
 # ============================================================
 # HELPERS DE FILTRADO
 # ============================================================
