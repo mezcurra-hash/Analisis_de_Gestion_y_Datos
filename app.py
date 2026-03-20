@@ -752,15 +752,30 @@ elif app_mode == "🎧  Call Center":
         except Exception as e:
             return pd.DataFrame(), str(e)
         df.columns = df.columns.str.strip()
+
+        # Renombrar columnas del archivo al nombre estándar del código
+        rename_map = {
+            'MES'                    : 'MES',
+            'INGRESADOS REDES'       : 'INGRESADOS_REDES',
+            'ATENDIDOS OPERADOR'     : 'ATENDIDOS_REDES',
+            'NO ATENDIDOS'           : 'NO_ATENDIDOS_REDES',
+            'TURNOS PRÁCTICAS (AS)'  : 'TURNOS_PRACT_REDES',
+            'TURNOS CONSULTORIOS (TS)': 'TURNOS_CONS_REDES',
+            'TOTAL TURNOS'           : 'TURNOS_TOTAL_REDES',
+        }
+        df = df.rename(columns=rename_map)
+
         df['FECHA_REAL'] = pd.to_datetime(df['MES'], dayfirst=True, errors='coerce')
         df = df.dropna(subset=['FECHA_REAL']).sort_values('FECHA_REAL')
+
         cols_num = ['INGRESADOS_REDES','ATENDIDOS_REDES','NO_ATENDIDOS_REDES',
                     'TURNOS_PRACT_REDES','TURNOS_CONS_REDES','TURNOS_TOTAL_REDES']
         for c in cols_num:
             if c in df.columns:
-                df[c] = pd.to_numeric(df[c].astype(str).str.replace('.','',regex=False)
-                                          .str.replace(',','',regex=False), errors='coerce').fillna(0)
-        df['SLA_REDES'] = (df['ATENDIDOS_REDES'] / df['INGRESADOS_REDES'] * 100).fillna(0)
+                df[c] = pd.to_numeric(
+                    df[c].astype(str).str.replace('.','',regex=False)
+                                     .str.replace(',','',regex=False),
+                    errors='coerce').fillna(0)
         return df, None
 
     def parsear_fecha(txt):
@@ -790,8 +805,11 @@ elif app_mode == "🎧  Call Center":
         df_red, redes_error = cargar_datos_redes()
         if redes_error:
             st.warning(f"⚠️ No se pudo cargar BD_REDES (¿publicaste la hoja?): {redes_error}")
-        if not df_red.empty:
+        if not df_red.empty and 'ATENDIDOS_REDES' in df_red.columns and 'INGRESADOS_REDES' in df_red.columns:
             df_red['SLA_REDES'] = (df_red['ATENDIDOS_REDES'] / df_red['INGRESADOS_REDES'] * 100).fillna(0)
+        elif not df_red.empty:
+            st.warning(f"⚠️ BD_REDES no tiene las columnas esperadas. Columnas encontradas: {list(df_red.columns)}")
+            df_red = pd.DataFrame()  # Reset para evitar errores downstream
 
         with st.sidebar:
             st.markdown(f"<div style='font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:{TEXT_MUTED};margin-bottom:8px;'>VISTA</div>", unsafe_allow_html=True)
