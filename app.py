@@ -767,7 +767,28 @@ elif app_mode == "🎧  Call Center":
         }
         df = df.rename(columns=rename_map)
 
-        df['FECHA_REAL'] = pd.to_datetime(df['MES'], dayfirst=True, errors='coerce')
+        def parsear_fecha_redes(txt):
+            if not txt or str(txt).strip() in ['', 'nan']: return None
+            t = str(txt).lower().strip().replace(".", "")
+            m_map = {'ene':1,'feb':2,'mar':3,'abr':4,'may':5,'jun':6,
+                     'jul':7,'ago':8,'sep':9,'oct':10,'nov':11,'dic':12,
+                     'jan':1,'apr':4,'aug':8,'dec':12}
+            # Try standard datetime first
+            try:
+                ts = pd.to_datetime(t, dayfirst=True)
+                if ts.year > 2000: return ts.replace(day=1)
+            except: pass
+            # Try "mes-año" format
+            for sep in ['-', ' ']:
+                p = t.replace(sep, ' ').split()
+                if len(p) >= 2:
+                    mes = m_map.get(p[0][:3])
+                    yr  = p[1] if len(p[1]) == 4 else "20" + p[1]
+                    if mes and yr.isdigit():
+                        return pd.Timestamp(year=int(yr), month=mes, day=1)
+            return None
+
+        df['FECHA_REAL'] = df['MES'].apply(parsear_fecha_redes)
         df = df.dropna(subset=['FECHA_REAL']).sort_values('FECHA_REAL')
 
         cols_num = ['INGRESADOS_REDES','ATENDIDOS_REDES','NO_ATENDIDOS_REDES',
