@@ -1219,9 +1219,14 @@ elif app_mode == "🎧  Call Center":
                 if not tiene_op_tel:
                     st.info("Sin datos de operadores de teléfono.")
                 else:
-                    # KPIs del último período
-                    ult = df_op_tel.iloc[-1]
-                    ant = df_op_tel.iloc[-2] if len(df_op_tel) >= 2 else None
+                    fechas_op_tel = sorted(df_op_tel['FECHA_REAL'].unique(), reverse=True)
+                    sel_op_tel = st.selectbox("Período", fechas_op_tel,
+                                              format_func=lambda x: f"{MESES_FULL[x.month]} {x.year}",
+                                              key="sel_op_tel")
+                    idx_op_tel = df_op_tel[df_op_tel['FECHA_REAL']==sel_op_tel].index[0]
+                    ult = df_op_tel.loc[idx_op_tel]
+                    ant_df = df_op_tel[df_op_tel['FECHA_REAL'] < sel_op_tel]
+                    ant = ant_df.iloc[-1] if not ant_df.empty else None
 
                     prod_actual = ult['PROD_TEL']
                     prod_ant    = ant['PROD_TEL'] if ant is not None else None
@@ -1235,7 +1240,7 @@ elif app_mode == "🎧  Call Center":
                     tmo_actual = ult['TMO_SEG']
                     tmo_ant    = ant['TMO_SEG'] if ant is not None else None
 
-                    label_per = f"{MESES_FULL[ult['FECHA_REAL'].month]} {ult['FECHA_REAL'].year}"
+                    label_per = f"{MESES_FULL[sel_op_tel.month]} {sel_op_tel.year}"
                     st.markdown(f'<div class="section-subtitle">Último período · <span class="badge">{label_per}</span></div>',
                                 unsafe_allow_html=True)
 
@@ -1300,8 +1305,14 @@ elif app_mode == "🎧  Call Center":
                 if not tiene_op_red:
                     st.info("Sin datos de operadores de redes.")
                 else:
-                    ult_r = df_op_red.iloc[-1]
-                    ant_r = df_op_red.iloc[-2] if len(df_op_red) >= 2 else None
+                    fechas_op_red = sorted(df_op_red['FECHA_REAL'].unique(), reverse=True)
+                    sel_op_red = st.selectbox("Período", fechas_op_red,
+                                              format_func=lambda x: f"{MESES_FULL[x.month]} {x.year}",
+                                              key="sel_op_red")
+                    idx_op_red = df_op_red[df_op_red['FECHA_REAL']==sel_op_red].index[0]
+                    ult_r = df_op_red.loc[idx_op_red]
+                    ant_r_df = df_op_red[df_op_red['FECHA_REAL'] < sel_op_red]
+                    ant_r = ant_r_df.iloc[-1] if not ant_r_df.empty else None
 
                     prod_r  = ult_r['PROD_RED']
                     prod_ra = ant_r['PROD_RED'] if ant_r is not None else None
@@ -1311,7 +1322,7 @@ elif app_mode == "🎧  Call Center":
                     op_ra   = ant_r['OPERADORES'] if ant_r is not None else None
                     d_opr   = (op_r - op_ra) if op_ra is not None else None
 
-                    label_per_r = f"{MESES_FULL[ult_r['FECHA_REAL'].month]} {ult_r['FECHA_REAL'].year}"
+                    label_per_r = f"{MESES_FULL[sel_op_red.month]} {sel_op_red.year}"
                     st.markdown(f'<div class="section-subtitle">Último período · <span class="badge">{label_per_r}</span></div>',
                                 unsafe_allow_html=True)
 
