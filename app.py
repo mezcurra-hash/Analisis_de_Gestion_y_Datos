@@ -747,7 +747,10 @@ elif app_mode == "🎧  Call Center":
     @st.cache_data(ttl=300)
     def cargar_datos_redes():
         url = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQHFwl-Dxn-Rw9KN_evkCMk2Er8lQqgZMzAtN4LuEkWcCeBVUNwgb8xeIFKvpyxMgeGTeJ3oEWKpMZj/pub?gid=734059738&single=true&output=csv"
-        df = pd.read_csv(url)
+        try:
+            df = pd.read_csv(url)
+        except Exception as e:
+            return pd.DataFrame(), str(e)
         df.columns = df.columns.str.strip()
         df['FECHA_REAL'] = pd.to_datetime(df['MES'], dayfirst=True, errors='coerce')
         df = df.dropna(subset=['FECHA_REAL']).sort_values('FECHA_REAL')
@@ -757,7 +760,8 @@ elif app_mode == "🎧  Call Center":
             if c in df.columns:
                 df[c] = pd.to_numeric(df[c].astype(str).str.replace('.','',regex=False)
                                           .str.replace(',','',regex=False), errors='coerce').fillna(0)
-        return df
+        df['SLA_REDES'] = (df['ATENDIDOS_REDES'] / df['INGRESADOS_REDES'] * 100).fillna(0)
+        return df, None
 
     def parsear_fecha(txt):
         if pd.isna(txt): return None
@@ -783,8 +787,11 @@ elif app_mode == "🎧  Call Center":
         df_tel['TOTAL_PERDIDAS']  = df_tel['PERDIDAS_FIN']   + df_tel['PERDIDAS_PREPAGO']
         df_tel['SLA']             = (df_tel['TOTAL_ATENDIDAS'] / df_tel['TOTAL_LLAMADAS'] * 100).fillna(0)
 
-        df_red = cargar_datos_redes()
-        df_red['SLA_REDES'] = (df_red['ATENDIDOS_REDES'] / df_red['INGRESADOS_REDES'] * 100).fillna(0)
+        df_red, redes_error = cargar_datos_redes()
+        if redes_error:
+            st.warning(f"⚠️ No se pudo cargar BD_REDES (¿publicaste la hoja?): {redes_error}")
+        if not df_red.empty:
+            df_red['SLA_REDES'] = (df_red['ATENDIDOS_REDES'] / df_red['INGRESADOS_REDES'] * 100).fillna(0)
 
         with st.sidebar:
             st.markdown(f"<div style='font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:{TEXT_MUTED};margin-bottom:8px;'>VISTA</div>", unsafe_allow_html=True)
