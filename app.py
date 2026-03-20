@@ -1252,9 +1252,13 @@ elif app_mode == "🎧  Call Center":
                     c2.markdown(kpi_card("📞 Llamadas / Operador", prod_actual,
                                          delta=d_prod, delta_pct=p_prod), unsafe_allow_html=True)
                     tmo_str = seg_a_mmss(tmo_actual) if tmo_actual else "—"
-                    c3.markdown(kpi_card("⏱️ TMO", 0, suffix=""), unsafe_allow_html=True)
-                    c3.markdown(f"<div style='font-size:22px;font-weight:700;font-family:DM Mono,monospace;color:#CDD6F4;margin-top:-8px;padding-left:20px;'>{tmo_str}</div>", unsafe_allow_html=True)
-                    c3.caption("Tiempo Medio de Operación")
+                    c3.markdown(f"""
+                    <div class="kpi-card">
+                        <div class="kpi-label">⏱️ TMO</div>
+                        <div class="kpi-value">{tmo_str}</div>
+                        <div class="kpi-help">Tiempo Medio de Operación</div>
+                    </div>
+                    """, unsafe_allow_html=True)
                     c4.markdown(kpi_card("📊 Llamadas Atendidas", int(ult['LLAMADAS_ATENDIDAS'])), unsafe_allow_html=True)
 
                     st.markdown("<br>", unsafe_allow_html=True)
@@ -1334,9 +1338,13 @@ elif app_mode == "🎧  Call Center":
                     c2.markdown(kpi_card("📱 Casos / Operador", prod_r,
                                          delta=d_pr, delta_pct=p_pr), unsafe_allow_html=True)
                     tmo_r_str = seg_a_mmss(ult_r['TMO_SEG']) if pd.notna(ult_r['TMO_SEG']) else "—"
-                    c3.markdown(kpi_card("⏱️ TMO", 0, suffix=""), unsafe_allow_html=True)
-                    c3.markdown(f"<div style='font-size:22px;font-weight:700;font-family:DM Mono,monospace;color:#CDD6F4;margin-top:-8px;padding-left:20px;'>{tmo_r_str}</div>", unsafe_allow_html=True)
-                    c3.caption("Tiempo Medio de Operación")
+                    c3.markdown(f"""
+                    <div class="kpi-card">
+                        <div class="kpi-label">⏱️ TMO</div>
+                        <div class="kpi-value">{tmo_r_str}</div>
+                        <div class="kpi-help">Tiempo Medio de Operación</div>
+                    </div>
+                    """, unsafe_allow_html=True)
                     c4.markdown(kpi_card("📊 Casos Respondidos", int(ult_r['CASOS_RESPONDIDOS'])), unsafe_allow_html=True)
 
                     st.markdown("<br>", unsafe_allow_html=True)
