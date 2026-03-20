@@ -1423,6 +1423,8 @@ elif app_mode == "🎧  Call Center":
                     st.warning("Sin datos históricos para este mes.")
                 else:
                     df_i['AÑO'] = df_i['FECHA_REAL'].dt.year.astype(str)
+                    # Recalcular SLA para asegurar que todos los años tienen el dato
+                    df_i['SLA'] = (df_i['TOTAL_ATENDIDAS'] / df_i['TOTAL_LLAMADAS'] * 100).fillna(0)
                     fig = go.Figure()
                     fig.add_trace(go.Bar(x=df_i['AÑO'], y=df_i['TOTAL_ATENDIDAS'],
                         name='Atendidas', marker_color=ACCENT,
@@ -1438,7 +1440,8 @@ elif app_mode == "🎧  Call Center":
                     apply_plotly_defaults(fig, f"Teléfono — {mes_nom} · comparativa interanual")
                     fig.update_layout(barmode='group', height=400,
                         yaxis2=dict(overlaying='y', side='right', showgrid=False,
-                                    title='SLA %', color=ACCENT3))
+                                    title='SLA %', color=ACCENT3,
+                                    range=[0, 110]))
                     st.plotly_chart(fig, use_container_width=True)
 
             elif "Redes" in canal_int:
@@ -1447,6 +1450,7 @@ elif app_mode == "🎧  Call Center":
                     st.warning("Sin datos de redes para este mes.")
                 else:
                     df_i['AÑO'] = df_i['FECHA_REAL'].dt.year.astype(str)
+                    df_i['SLA_REDES'] = (df_i['ATENDIDOS_REDES'] / df_i['INGRESADOS_REDES'] * 100).fillna(0)
                     fig = go.Figure()
                     fig.add_trace(go.Bar(x=df_i['AÑO'], y=df_i['ATENDIDOS_REDES'],
                         name='Atendidos', marker_color=ACCENT3,
@@ -1462,36 +1466,49 @@ elif app_mode == "🎧  Call Center":
                     apply_plotly_defaults(fig, f"Redes — {mes_nom} · comparativa interanual")
                     fig.update_layout(barmode='group', height=400,
                         yaxis2=dict(overlaying='y', side='right', showgrid=False,
-                                    title='Atención %', color=ACCENT))
+                                    title='Atención %', color=ACCENT,
+                                    range=[0, 110]))
                     st.plotly_chart(fig, use_container_width=True)
 
             else:  # Combinado
                 df_it = df_tel[df_tel['FECHA_REAL'].dt.month == m_num].copy()
                 df_ir = df_red[df_red['FECHA_REAL'].dt.month == m_num].copy()
+
                 if df_it.empty and df_ir.empty:
                     st.warning("Sin datos para este mes.")
                 else:
                     df_it['AÑO'] = df_it['FECHA_REAL'].dt.year.astype(str)
                     df_ir['AÑO'] = df_ir['FECHA_REAL'].dt.year.astype(str)
-                    fig = go.Figure()
-                    if not df_it.empty:
-                        fig.add_trace(go.Bar(x=df_it['AÑO'], y=df_it['TOTAL_ATENDIDAS'],
+
+                    # Mostrar solo años donde AMBOS canales tienen dato
+                    años_tel = set(df_it['AÑO'])
+                    años_red = set(df_ir['AÑO'])
+                    años_comunes = años_tel & años_red
+
+                    if not años_comunes:
+                        st.info("No hay años con datos simultáneos en ambos canales para este mes.")
+                    else:
+                        df_it_f = df_it[df_it['AÑO'].isin(años_comunes)]
+                        df_ir_f = df_ir[df_ir['AÑO'].isin(años_comunes)]
+
+                        if pd.Timestamp(f"{min(int(a) for a in años_comunes)}-{m_num:02d}-01") < CORTE_SISTEMAS:
+                            st.markdown(f"""
+                            <div class="insight-box insight-box-amber">
+                                ⚠️ Antes de Julio 2024 los canales estaban unificados — la comparativa
+                                interanual puede no ser homogénea para años anteriores a 2024.
+                            </div>
+                            """, unsafe_allow_html=True)
+
+                        fig = go.Figure()
+                        fig.add_trace(go.Bar(x=df_it_f['AÑO'], y=df_it_f['TOTAL_ATENDIDAS'],
                             name='Atendidas Tel', marker_color=ACCENT,
-                            text=df_it['TOTAL_ATENDIDAS'], texttemplate='%{text:,.0f}'))
-                    if not df_ir.empty:
-                        fig.add_trace(go.Bar(x=df_ir['AÑO'], y=df_ir['ATENDIDOS_REDES'],
+                            text=df_it_f['TOTAL_ATENDIDAS'], texttemplate='%{text:,.0f}'))
+                        fig.add_trace(go.Bar(x=df_ir_f['AÑO'], y=df_ir_f['ATENDIDOS_REDES'],
                             name='Atendidos Redes', marker_color=ACCENT3,
-                            text=df_ir['ATENDIDOS_REDES'], texttemplate='%{text:,.0f}'))
-                    if pd.Timestamp(f"{min(df_it['FECHA_REAL'].dt.year.min() if not df_it.empty else 9999, df_ir['FECHA_REAL'].dt.year.min() if not df_ir.empty else 9999)}-{m_num:02d}-01") < CORTE_SISTEMAS:
-                        st.markdown(f"""
-                        <div class="insight-box insight-box-amber">
-                            ⚠️ Antes de Julio 2024 los canales estaban unificados — la comparativa
-                            interanual puede no ser homogénea para años anteriores a 2024.
-                        </div>
-                        """, unsafe_allow_html=True)
-                    apply_plotly_defaults(fig, f"Combinado — {mes_nom} · comparativa interanual")
-                    fig.update_layout(barmode='group', height=400)
-                    st.plotly_chart(fig, use_container_width=True)
+                            text=df_ir_f['ATENDIDOS_REDES'], texttemplate='%{text:,.0f}'))
+                        apply_plotly_defaults(fig, f"Combinado — {mes_nom} · comparativa interanual")
+                        fig.update_layout(barmode='group', height=400)
+                        st.plotly_chart(fig, use_container_width=True)
 
     except Exception as e:
         st.error(f"❌ Error en Call Center: {e}")
