@@ -750,7 +750,7 @@ elif app_mode == "🎧  Call Center":
         # Reemplazar REDES_GID con el gid real de la pestaña BD_REDES
         url = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTOxpr7RRNTLGO96pUK8HJ0iy2ZHeqNpiR7OelleljCVoWPuJCO26q5z66VisWB76khl7Tmsqh5CqNC/pub?gid=734059738&single=true&output=csv"
         try:
-            df = pd.read_csv(url)
+            df = pd.read_csv(url, dtype=str).fillna('')
         except Exception as e:
             return pd.DataFrame(), str(e)
         df.columns = df.columns.str.strip().str.replace('\n', ' ', regex=False)
