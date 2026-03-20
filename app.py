@@ -753,17 +753,17 @@ elif app_mode == "🎧  Call Center":
             df = pd.read_csv(url)
         except Exception as e:
             return pd.DataFrame(), str(e)
-        df.columns = df.columns.str.strip()
+        df.columns = df.columns.str.strip().str.replace('\n', ' ', regex=False)
 
         # Renombrar columnas del archivo al nombre estándar del código
         rename_map = {
-            'MES'                    : 'MES',
-            'INGRESADOS REDES'       : 'INGRESADOS_REDES',
-            'ATENDIDOS OPERADOR'     : 'ATENDIDOS_REDES',
-            'NO ATENDIDOS'           : 'NO_ATENDIDOS_REDES',
-            'TURNOS PRÁCTICAS (AS)'  : 'TURNOS_PRACT_REDES',
-            'TURNOS CONSULTORIOS (TS)': 'TURNOS_CONS_REDES',
-            'TOTAL TURNOS'           : 'TURNOS_TOTAL_REDES',
+            'MES'                      : 'MES',
+            'INGRESADOS REDES'         : 'INGRESADOS_REDES',
+            'ATENDIDOS OPERADOR'       : 'ATENDIDOS_REDES',
+            'NO ATENDIDOS'             : 'NO_ATENDIDOS_REDES',
+            'TURNOS PRÁCTICAS (AS)'    : 'TURNOS_PRACT_REDES',
+            'TURNOS CONSULTORIOS (TS)' : 'TURNOS_CONS_REDES',
+            'TOTAL TURNOS'             : 'TURNOS_TOTAL_REDES',
         }
         df = df.rename(columns=rename_map)
 
