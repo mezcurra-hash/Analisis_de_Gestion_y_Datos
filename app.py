@@ -746,7 +746,9 @@ elif app_mode == "🎧  Call Center":
 
     @st.cache_data(ttl=300)
     def cargar_datos_redes():
-        url = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTOxpr7RRNTLGO96pUK8HJ0iy2ZHeqNpiR7OelleljCVoWPuJCO26q5z66VisWB76khl7Tmsqh5CqNC/pub?output=csv"
+        # BD_REDES está en el mismo archivo que BD_CALLCENTER
+        # Reemplazar REDES_GID con el gid real de la pestaña BD_REDES
+        url = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTOxpr7RRNTLGO96pUK8HJ0iy2ZHeqNpiR7OelleljCVoWPuJCO26q5z66VisWB76khl7Tmsqh5CqNC/pub?gid=734059738&single=true&output=csv"
         try:
             df = pd.read_csv(url)
         except Exception as e:
