@@ -813,6 +813,62 @@ elif app_mode == "🎧  Call Center":
         yr  = p[1] if len(p[1])==4 else "20"+p[1]
         return pd.Timestamp(year=int(yr), month=mes, day=1) if mes else None
 
+    def tmo_a_segundos(txt):
+        """Convierte '0:03:45' o '3:45' a segundos."""
+        if not txt or str(txt).strip() in ['','nan','0']: return None
+        try:
+            partes = str(txt).strip().split(':')
+            if len(partes) == 3:   # H:MM:SS
+                return int(partes[0])*3600 + int(partes[1])*60 + int(partes[2])
+            elif len(partes) == 2: # MM:SS
+                return int(partes[0])*60 + int(partes[1])
+        except: pass
+        return None
+
+    def seg_a_mmss(seg):
+        """Convierte segundos a string 'Xm Ys'."""
+        if seg is None or np.isnan(seg): return "—"
+        seg = int(seg)
+        return f"{seg//60}m {seg%60:02d}s"
+
+    @st.cache_data(ttl=300)
+    def cargar_operadores_tel():
+        url = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTOxpr7RRNTLGO96pUK8HJ0iy2ZHeqNpiR7OelleljCVoWPuJCO26q5z66VisWB76khl7Tmsqh5CqNC/pub?gid=894931362&single=true&output=csv"
+        try:
+            df = pd.read_csv(url, dtype=str).fillna('')
+            df.columns = df.columns.str.strip()
+            df['FECHA_REAL'] = df['MES'].apply(parsear_fecha)
+            df = df.dropna(subset=['FECHA_REAL']).sort_values('FECHA_REAL')
+            df['OPERADORES']        = pd.to_numeric(df['OPERADORES'], errors='coerce').fillna(0)
+            df['LLAMADAS_ATENDIDAS']= pd.to_numeric(
+                df['LLAMADAS_ATENDIDAS'].str.replace('.','',regex=False)
+                                       .str.replace(',','',regex=False),
+                errors='coerce').fillna(0)
+            df['TMO_SEG'] = df['TMO_SEG'].apply(tmo_a_segundos)
+            df['PROD_TEL'] = (df['LLAMADAS_ATENDIDAS'] / df['OPERADORES']).where(df['OPERADORES']>0)
+            return df, None
+        except Exception as e:
+            return pd.DataFrame(), str(e)
+
+    @st.cache_data(ttl=300)
+    def cargar_operadores_redes():
+        url = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTOxpr7RRNTLGO96pUK8HJ0iy2ZHeqNpiR7OelleljCVoWPuJCO26q5z66VisWB76khl7Tmsqh5CqNC/pub?gid=2101265013&single=true&output=csv"
+        try:
+            df = pd.read_csv(url, dtype=str).fillna('')
+            df.columns = df.columns.str.strip()
+            df['FECHA_REAL'] = df['MES'].apply(parsear_fecha)
+            df = df.dropna(subset=['FECHA_REAL']).sort_values('FECHA_REAL')
+            df['OPERADORES']        = pd.to_numeric(df['OPERADORES'], errors='coerce').fillna(0)
+            df['CASOS_RESPONDIDOS'] = pd.to_numeric(
+                df['CASOS_RESPONDIDOS'].str.replace('.','',regex=False)
+                                      .str.replace(',','',regex=False),
+                errors='coerce').fillna(0)
+            df['TMO_SEG'] = df['TMO_SEG'].apply(tmo_a_segundos)
+            df['PROD_RED'] = (df['CASOS_RESPONDIDOS'] / df['OPERADORES']).where(df['OPERADORES']>0)
+            return df, None
+        except Exception as e:
+            return pd.DataFrame(), str(e)
+
     # Corte de sistema: antes de Jul-2024 los turnos estaban unificados
     CORTE_SISTEMAS = pd.Timestamp('2024-07-01')
 
@@ -827,16 +883,19 @@ elif app_mode == "🎧  Call Center":
 
         df_red, redes_error = cargar_datos_redes()
         if redes_error:
-            st.warning(f"⚠️ No se pudo cargar BD_REDES (¿publicaste la hoja?): {redes_error}")
+            st.warning(f"⚠️ No se pudo cargar BD_REDES: {redes_error}")
         if not df_red.empty and 'ATENDIDOS_REDES' in df_red.columns and 'INGRESADOS_REDES' in df_red.columns:
             df_red['SLA_REDES'] = (df_red['ATENDIDOS_REDES'] / df_red['INGRESADOS_REDES'] * 100).fillna(0)
         elif not df_red.empty:
-            st.warning(f"⚠️ BD_REDES no tiene las columnas esperadas. Columnas encontradas: {list(df_red.columns)}")
-            df_red = pd.DataFrame()  # Reset para evitar errores downstream
+            st.warning(f"⚠️ BD_REDES columnas inesperadas: {list(df_red.columns)}")
+            df_red = pd.DataFrame()
+
+        df_op_tel, op_tel_err   = cargar_operadores_tel()
+        df_op_red, op_red_err   = cargar_operadores_redes()
 
         with st.sidebar:
             st.markdown(f"<div style='font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:{TEXT_MUTED};margin-bottom:8px;'>VISTA</div>", unsafe_allow_html=True)
-            modo = st.radio("", ["📅  Mensual", "📱  Redes Sociales", "🔄  Interanual"],
+            modo = st.radio("", ["📅  Mensual", "📱  Redes Sociales", "👥  Operadores", "🔄  Interanual"],
                             label_visibility="collapsed")
             st.markdown("<hr>", unsafe_allow_html=True)
             if "Mensual" in modo:
@@ -1138,6 +1197,199 @@ elif app_mode == "🎧  Call Center":
                                             'TURNOS_CONS_REDES':'{:,.0f}','TURNOS_TOTAL_REDES':'{:,.0f}',
                                             'SLA_REDES':'{:.1f}%'}),
                              use_container_width=True)
+
+        # ══════════════════════════════════════════════════════
+        # VISTA OPERADORES
+        # ══════════════════════════════════════════════════════
+        elif "Operadores" in modo:
+            st.markdown('<div class="section-subtitle">Dotación, productividad y TMO por canal</div>',
+                        unsafe_allow_html=True)
+
+            tiene_op_tel = not df_op_tel.empty
+            tiene_op_red = not df_op_red.empty
+
+            if not tiene_op_tel and not tiene_op_red:
+                st.warning("No hay datos de operadores disponibles.")
+                st.stop()
+
+            tab_tel, tab_red = st.tabs(["📞 Teléfono", "📱 Redes Sociales"])
+
+            # ── TELÉFONO ─────────────────────────────────────
+            with tab_tel:
+                if not tiene_op_tel:
+                    st.info("Sin datos de operadores de teléfono.")
+                else:
+                    # KPIs del último período
+                    ult = df_op_tel.iloc[-1]
+                    ant = df_op_tel.iloc[-2] if len(df_op_tel) >= 2 else None
+
+                    prod_actual = ult['PROD_TEL']
+                    prod_ant    = ant['PROD_TEL'] if ant is not None else None
+                    d_prod = (prod_actual - prod_ant) if prod_ant else None
+                    p_prod = (d_prod / prod_ant * 100) if prod_ant else None
+
+                    op_actual = ult['OPERADORES']
+                    op_ant    = ant['OPERADORES'] if ant is not None else None
+                    d_op = (op_actual - op_ant) if op_ant is not None else None
+
+                    tmo_actual = ult['TMO_SEG']
+                    tmo_ant    = ant['TMO_SEG'] if ant is not None else None
+
+                    label_per = f"{MESES_FULL[ult['FECHA_REAL'].month]} {ult['FECHA_REAL'].year}"
+                    st.markdown(f'<div class="section-subtitle">Último período · <span class="badge">{label_per}</span></div>',
+                                unsafe_allow_html=True)
+
+                    c1, c2, c3, c4 = st.columns(4)
+                    c1.markdown(kpi_card("👥 Operadores Activos", op_actual,
+                                         delta=d_op, delta_label=f"{'+' if d_op and d_op>=0 else ''}{int(d_op) if d_op else ''} vs mes anterior",
+                                         fmt_fn=lambda x: f"{int(x)}"), unsafe_allow_html=True)
+                    c2.markdown(kpi_card("📞 Llamadas / Operador", prod_actual,
+                                         delta=d_prod, delta_label=f"{'+' if d_prod and d_prod>=0 else ''}{d_prod:.0f} ({p_prod:+.1f}%)" if d_prod else "",
+                                         fmt_fn=lambda x: f"{x:,.0f}"), unsafe_allow_html=True)
+                    c3.markdown(kpi_card("⏱️ TMO Promedio",
+                                         tmo_actual if tmo_actual else 0,
+                                         fmt_fn=lambda x: seg_a_mmss(x) if x else "—"), unsafe_allow_html=True)
+                    c3.caption("Tiempo Medio de Operación")
+                    c4.markdown(kpi_card("📊 Total Llamadas Atendidas",
+                                         ult['LLAMADAS_ATENDIDAS'],
+                                         fmt_fn=lambda x: f"{int(x):,}"), unsafe_allow_html=True)
+
+                    st.markdown("<br>", unsafe_allow_html=True)
+
+                    # Gráfico 1: Dotación + Productividad
+                    fig_op = go.Figure()
+                    fig_op.add_trace(go.Bar(
+                        x=df_op_tel['FECHA_REAL'], y=df_op_tel['OPERADORES'],
+                        name='Operadores', marker_color=BLUE_LIGHT,
+                        text=df_op_tel['OPERADORES'].astype(int), texttemplate='%{text}',
+                        textposition='outside', opacity=0.8,
+                    ))
+                    fig_op.add_trace(go.Scatter(
+                        x=df_op_tel['FECHA_REAL'], y=df_op_tel['PROD_TEL'],
+                        name='Llamadas/Operador', yaxis='y2',
+                        line=dict(color=ACCENT, width=2), mode='lines+markers',
+                    ))
+                    apply_plotly_defaults(fig_op, "Dotación y productividad — Teléfono")
+                    fig_op.update_layout(height=320,
+                        yaxis2=dict(overlaying='y', side='right', showgrid=False,
+                                    title='Llamadas/Op', color=ACCENT))
+                    st.plotly_chart(fig_op, use_container_width=True)
+
+                    # Gráfico 2: TMO (solo donde hay dato)
+                    df_tmo = df_op_tel[df_op_tel['TMO_SEG'].notna()].copy()
+                    if not df_tmo.empty:
+                        st.markdown("<hr>", unsafe_allow_html=True)
+                        df_tmo['TMO_LABEL'] = df_tmo['TMO_SEG'].apply(seg_a_mmss)
+                        fig_tmo = go.Figure()
+                        fig_tmo.add_trace(go.Scatter(
+                            x=df_tmo['FECHA_REAL'], y=df_tmo['TMO_SEG'],
+                            name='TMO (seg)', mode='lines+markers+text',
+                            line=dict(color=ACCENT3, width=2),
+                            marker=dict(size=7),
+                            text=df_tmo['TMO_LABEL'],
+                            textposition='top center',
+                        ))
+                        apply_plotly_defaults(fig_tmo, "TMO — Tiempo Medio de Operación · Teléfono")
+                        fig_tmo.update_layout(height=280,
+                            yaxis=dict(tickformat='d',
+                                       tickvals=list(range(0, int(df_tmo['TMO_SEG'].max())+60, 30)),
+                                       ticktext=[seg_a_mmss(s) for s in range(0, int(df_tmo['TMO_SEG'].max())+60, 30)]))
+                        st.caption("⚠️ TMO disponible desde Enero 2025")
+                        st.plotly_chart(fig_tmo, use_container_width=True)
+
+            # ── REDES ─────────────────────────────────────────
+            with tab_red:
+                if not tiene_op_red:
+                    st.info("Sin datos de operadores de redes.")
+                else:
+                    ult_r = df_op_red.iloc[-1]
+                    ant_r = df_op_red.iloc[-2] if len(df_op_red) >= 2 else None
+
+                    prod_r  = ult_r['PROD_RED']
+                    prod_ra = ant_r['PROD_RED'] if ant_r is not None else None
+                    d_pr    = (prod_r - prod_ra) if prod_ra else None
+                    p_pr    = (d_pr / prod_ra * 100) if prod_ra else None
+                    op_r    = ult_r['OPERADORES']
+                    op_ra   = ant_r['OPERADORES'] if ant_r is not None else None
+                    d_opr   = (op_r - op_ra) if op_ra is not None else None
+
+                    label_per_r = f"{MESES_FULL[ult_r['FECHA_REAL'].month]} {ult_r['FECHA_REAL'].year}"
+                    st.markdown(f'<div class="section-subtitle">Último período · <span class="badge">{label_per_r}</span></div>',
+                                unsafe_allow_html=True)
+
+                    c1, c2, c3, c4 = st.columns(4)
+                    c1.markdown(kpi_card("👥 Operadores Activos", op_r,
+                                         delta=d_opr, delta_label=f"{'+' if d_opr and d_opr>=0 else ''}{int(d_opr) if d_opr else ''} vs mes anterior",
+                                         fmt_fn=lambda x: f"{int(x)}"), unsafe_allow_html=True)
+                    c2.markdown(kpi_card("📱 Casos / Operador", prod_r,
+                                         delta=d_pr, delta_label=f"{'+' if d_pr and d_pr>=0 else ''}{d_pr:.0f} ({p_pr:+.1f}%)" if d_pr else "",
+                                         fmt_fn=lambda x: f"{x:,.0f}"), unsafe_allow_html=True)
+                    c3.markdown(kpi_card("⏱️ TMO Promedio",
+                                         ult_r['TMO_SEG'] if pd.notna(ult_r['TMO_SEG']) else 0,
+                                         fmt_fn=lambda x: seg_a_mmss(x) if x else "—"), unsafe_allow_html=True)
+                    c3.caption("Tiempo Medio de Operación")
+                    c4.markdown(kpi_card("📊 Total Casos Respondidos",
+                                         ult_r['CASOS_RESPONDIDOS'],
+                                         fmt_fn=lambda x: f"{int(x):,}"), unsafe_allow_html=True)
+
+                    st.markdown("<br>", unsafe_allow_html=True)
+
+                    fig_op_r = go.Figure()
+                    fig_op_r.add_trace(go.Bar(
+                        x=df_op_red['FECHA_REAL'], y=df_op_red['OPERADORES'],
+                        name='Operadores', marker_color=ACCENT3,
+                        text=df_op_red['OPERADORES'].astype(int), texttemplate='%{text}',
+                        textposition='outside', opacity=0.8,
+                    ))
+                    fig_op_r.add_trace(go.Scatter(
+                        x=df_op_red['FECHA_REAL'], y=df_op_red['PROD_RED'],
+                        name='Casos/Operador', yaxis='y2',
+                        line=dict(color=ACCENT, width=2), mode='lines+markers',
+                    ))
+                    apply_plotly_defaults(fig_op_r, "Dotación y productividad — Redes")
+                    fig_op_r.update_layout(height=320,
+                        yaxis2=dict(overlaying='y', side='right', showgrid=False,
+                                    title='Casos/Op', color=ACCENT))
+                    st.plotly_chart(fig_op_r, use_container_width=True)
+
+                    df_tmo_r = df_op_red[df_op_red['TMO_SEG'].notna()].copy()
+                    if not df_tmo_r.empty:
+                        st.markdown("<hr>", unsafe_allow_html=True)
+                        df_tmo_r['TMO_LABEL'] = df_tmo_r['TMO_SEG'].apply(seg_a_mmss)
+                        fig_tmo_r = go.Figure()
+                        fig_tmo_r.add_trace(go.Scatter(
+                            x=df_tmo_r['FECHA_REAL'], y=df_tmo_r['TMO_SEG'],
+                            name='TMO (seg)', mode='lines+markers+text',
+                            line=dict(color=ACCENT3, width=2),
+                            marker=dict(size=7),
+                            text=df_tmo_r['TMO_LABEL'],
+                            textposition='top center',
+                        ))
+                        apply_plotly_defaults(fig_tmo_r, "TMO — Tiempo Medio de Operación · Redes")
+                        fig_tmo_r.update_layout(height=280,
+                            yaxis=dict(tickformat='d',
+                                       tickvals=list(range(0, int(df_tmo_r['TMO_SEG'].max())+60, 30)),
+                                       ticktext=[seg_a_mmss(s) for s in range(0, int(df_tmo_r['TMO_SEG'].max())+60, 30)]))
+                        st.caption("⚠️ TMO de redes disponible desde Enero 2025")
+                        st.plotly_chart(fig_tmo_r, use_container_width=True)
+
+            # Comparativa dotación teléfono vs redes
+            if tiene_op_tel and tiene_op_red:
+                st.markdown("<hr>", unsafe_allow_html=True)
+                st.markdown('<div class="sec-title" style="font-size:16px;">📊 Comparativa dotación — Teléfono vs Redes</div>',
+                            unsafe_allow_html=True)
+                fig_dot = go.Figure()
+                fig_dot.add_trace(go.Scatter(
+                    x=df_op_tel['FECHA_REAL'], y=df_op_tel['OPERADORES'],
+                    name='Operadores Tel', line=dict(color=BLUE_LIGHT, width=2),
+                    mode='lines+markers'))
+                fig_dot.add_trace(go.Scatter(
+                    x=df_op_red['FECHA_REAL'], y=df_op_red['OPERADORES'],
+                    name='Operadores Redes', line=dict(color=ACCENT3, width=2),
+                    mode='lines+markers'))
+                apply_plotly_defaults(fig_dot, "Evolución de dotación por canal")
+                fig_dot.update_layout(height=280)
+                st.plotly_chart(fig_dot, use_container_width=True)
 
         # ══════════════════════════════════════════════════════
         # VISTA INTERANUAL
