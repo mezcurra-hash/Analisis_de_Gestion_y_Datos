@@ -1241,18 +1241,16 @@ elif app_mode == "🎧  Call Center":
 
                     c1, c2, c3, c4 = st.columns(4)
                     c1.markdown(kpi_card("👥 Operadores Activos", op_actual,
-                                         delta=d_op, delta_label=f"{'+' if d_op and d_op>=0 else ''}{int(d_op) if d_op else ''} vs mes anterior",
-                                         fmt_fn=lambda x: f"{int(x)}"), unsafe_allow_html=True)
+                                         delta=d_op if d_op else None,
+                                         delta_pct=None), unsafe_allow_html=True)
+                    c1.caption(f"{'▲' if d_op and d_op>0 else '▼' if d_op and d_op<0 else ''} {int(d_op) if d_op else ''} vs mes anterior")
                     c2.markdown(kpi_card("📞 Llamadas / Operador", prod_actual,
-                                         delta=d_prod, delta_label=f"{'+' if d_prod and d_prod>=0 else ''}{d_prod:.0f} ({p_prod:+.1f}%)" if d_prod else "",
-                                         fmt_fn=lambda x: f"{x:,.0f}"), unsafe_allow_html=True)
-                    c3.markdown(kpi_card("⏱️ TMO Promedio",
-                                         tmo_actual if tmo_actual else 0,
-                                         fmt_fn=lambda x: seg_a_mmss(x) if x else "—"), unsafe_allow_html=True)
+                                         delta=d_prod, delta_pct=p_prod), unsafe_allow_html=True)
+                    tmo_str = seg_a_mmss(tmo_actual) if tmo_actual else "—"
+                    c3.markdown(kpi_card("⏱️ TMO", 0, suffix=""), unsafe_allow_html=True)
+                    c3.markdown(f"<div style='font-size:22px;font-weight:700;font-family:DM Mono,monospace;color:#CDD6F4;margin-top:-8px;padding-left:20px;'>{tmo_str}</div>", unsafe_allow_html=True)
                     c3.caption("Tiempo Medio de Operación")
-                    c4.markdown(kpi_card("📊 Total Llamadas Atendidas",
-                                         ult['LLAMADAS_ATENDIDAS'],
-                                         fmt_fn=lambda x: f"{int(x):,}"), unsafe_allow_html=True)
+                    c4.markdown(kpi_card("📊 Llamadas Atendidas", int(ult['LLAMADAS_ATENDIDAS'])), unsafe_allow_html=True)
 
                     st.markdown("<br>", unsafe_allow_html=True)
 
@@ -1319,18 +1317,16 @@ elif app_mode == "🎧  Call Center":
 
                     c1, c2, c3, c4 = st.columns(4)
                     c1.markdown(kpi_card("👥 Operadores Activos", op_r,
-                                         delta=d_opr, delta_label=f"{'+' if d_opr and d_opr>=0 else ''}{int(d_opr) if d_opr else ''} vs mes anterior",
-                                         fmt_fn=lambda x: f"{int(x)}"), unsafe_allow_html=True)
+                                         delta=d_opr if d_opr else None,
+                                         delta_pct=None), unsafe_allow_html=True)
+                    c1.caption(f"{'▲' if d_opr and d_opr>0 else '▼' if d_opr and d_opr<0 else ''} {int(d_opr) if d_opr else ''} vs mes anterior")
                     c2.markdown(kpi_card("📱 Casos / Operador", prod_r,
-                                         delta=d_pr, delta_label=f"{'+' if d_pr and d_pr>=0 else ''}{d_pr:.0f} ({p_pr:+.1f}%)" if d_pr else "",
-                                         fmt_fn=lambda x: f"{x:,.0f}"), unsafe_allow_html=True)
-                    c3.markdown(kpi_card("⏱️ TMO Promedio",
-                                         ult_r['TMO_SEG'] if pd.notna(ult_r['TMO_SEG']) else 0,
-                                         fmt_fn=lambda x: seg_a_mmss(x) if x else "—"), unsafe_allow_html=True)
+                                         delta=d_pr, delta_pct=p_pr), unsafe_allow_html=True)
+                    tmo_r_str = seg_a_mmss(ult_r['TMO_SEG']) if pd.notna(ult_r['TMO_SEG']) else "—"
+                    c3.markdown(kpi_card("⏱️ TMO", 0, suffix=""), unsafe_allow_html=True)
+                    c3.markdown(f"<div style='font-size:22px;font-weight:700;font-family:DM Mono,monospace;color:#CDD6F4;margin-top:-8px;padding-left:20px;'>{tmo_r_str}</div>", unsafe_allow_html=True)
                     c3.caption("Tiempo Medio de Operación")
-                    c4.markdown(kpi_card("📊 Total Casos Respondidos",
-                                         ult_r['CASOS_RESPONDIDOS'],
-                                         fmt_fn=lambda x: f"{int(x):,}"), unsafe_allow_html=True)
+                    c4.markdown(kpi_card("📊 Casos Respondidos", int(ult_r['CASOS_RESPONDIDOS'])), unsafe_allow_html=True)
 
                     st.markdown("<br>", unsafe_allow_html=True)
 
