@@ -648,20 +648,21 @@ if app_mode == "🏥  Oferta de Turnos":
 
             metrica_kpi = val_sel[0]
             agrup_col   = filas_sel[0]
-
-            # KPIs: último período vs penúltimo
             sorted_meses = sorted(meses_sel)
-            df_ultimo   = df_f[df_f['PERIODO'] == sorted_meses[-1]]
-            df_anterior = df_f[df_f['PERIODO'] == sorted_meses[-2]]
 
-            cols_kpi = st.columns(len(val_sel))
-            for i, metrica in enumerate(val_sel):
-                va  = df_anterior[metrica].sum()
-                vb  = df_ultimo[metrica].sum()
-                dlt = vb - va
-                pct = (dlt / va * 100) if va > 0 else 0
-                label = metrica.replace("_"," ").title()
-                cols_kpi[i].markdown(kpi_card(label, vb, dlt, pct), unsafe_allow_html=True)
+            # KPIs: una card por cada período seleccionado, con delta vs el anterior
+            cols_kpi = st.columns(len(sorted_meses))
+            for i, mes in enumerate(sorted_meses):
+                df_mes = df_f[df_f['PERIODO'] == mes]
+                valor  = df_mes[metrica_kpi].sum()
+                label  = f"{fmt_fecha(mes)}"
+                if i == 0:
+                    cols_kpi[i].markdown(kpi_card(label, valor), unsafe_allow_html=True)
+                else:
+                    val_ant = df_f[df_f['PERIODO'] == sorted_meses[i-1]][metrica_kpi].sum()
+                    dlt = valor - val_ant
+                    pct = (dlt / val_ant * 100) if val_ant > 0 else 0
+                    cols_kpi[i].markdown(kpi_card(label, valor, dlt, pct), unsafe_allow_html=True)
 
             st.markdown("<br>", unsafe_allow_html=True)
 
