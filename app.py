@@ -56,8 +56,12 @@ st.markdown(f"""
       font-family: 'DM Sans', sans-serif;
   }}
   #MainMenu, footer {{ visibility: hidden; }}
-  [data-testid="stHeader"] {{ visibility: hidden; }}
-  [data-testid="collapsedControl"] {{ visibility: visible !important; }}
+  header {{ background: transparent !important; }}
+  [data-testid="collapsedControl"] {{
+      visibility: visible !important;
+      z-index: 999999 !important;
+      pointer-events: all !important;
+  }}
 
   /* ── Fondo general ── */
   .stApp {{ background-color: #13151F; }}
@@ -369,17 +373,6 @@ with st.sidebar:
     )
     st.markdown("<hr>", unsafe_allow_html=True)
 
-# Hint de reapertura cuando sidebar está colapsado
-st.markdown(f"""
-<div style="position:fixed; bottom:16px; left:16px; z-index:9999;
-            background:{ACCENT}; color:#13151F; border-radius:20px;
-            padding:6px 14px; font-size:12px; font-weight:700;
-            cursor:pointer; opacity:0.85;"
-     title="Presioná [ para abrir el menú">
-    ☰ Menú — presioná [
-</div>
-""", unsafe_allow_html=True)
-
 # ============================================================
 # APP 1: OFERTA DE TURNOS
 # ============================================================
@@ -541,24 +534,19 @@ if app_mode == "🏥  Oferta de Turnos":
 
                 serie_completa = df_hist.groupby('PERIODO')[metrica_t].sum().reset_index().sort_values('PERIODO')
 
-                # Separar meses cerrados de meses futuros
-                # El mes en curso se incluye en el histórico (ya tiene datos cargados)
-                # La proyección arranca desde el mes siguiente al actual
                 hoy          = pd.Timestamp.today().normalize()
-                corte        = (hoy.replace(day=1) + pd.DateOffset(months=1))  # Primer día del mes siguiente
+                corte        = (hoy.replace(day=1) + pd.DateOffset(months=1))
                 serie_pasada = serie_completa[serie_completa['PERIODO'] < corte]
                 serie_futura = serie_completa[serie_completa['PERIODO'] >= corte]
 
                 if len(serie_pasada) < 3:
                     st.info("Se necesitan al menos 3 meses cerrados para calcular la tendencia.")
                 else:
-                    # Regresión lineal SOLO sobre meses cerrados
                     x    = np.arange(len(serie_pasada))
                     y    = serie_pasada[metrica_t].values
                     coef = np.polyfit(x, y, 1)
                     poly = np.poly1d(coef)
 
-                    # Proyección: 3 meses desde el último mes cerrado
                     N_PROJ      = 3
                     ultimo_cerrado = serie_pasada['PERIODO'].max()
                     fechas_proj = [ultimo_cerrado + pd.DateOffset(months=i+1) for i in range(N_PROJ)]
@@ -567,7 +555,6 @@ if app_mode == "🏥  Oferta de Turnos":
 
                     fig_t = go.Figure()
 
-                    # 1. Histórico real (meses cerrados)
                     fig_t.add_trace(go.Scatter(
                         x=serie_pasada['PERIODO'], y=serie_pasada[metrica_t],
                         name='Histórico (cerrado)', mode='lines+markers',
@@ -576,7 +563,6 @@ if app_mode == "🏥  Oferta de Turnos":
                         fill='tozeroy', fillcolor='rgba(79,195,247,0.1)',
                     ))
 
-                    # 2. Oferta futura cargada (AP solamente — referencia visual, no entra en regresión)
                     if not serie_futura.empty:
                         fig_t.add_trace(go.Scatter(
                             x=serie_futura['PERIODO'], y=serie_futura[metrica_t],
@@ -586,14 +572,12 @@ if app_mode == "🏥  Oferta de Turnos":
                             opacity=0.5,
                         ))
 
-                    # 3. Línea de tendencia sobre el histórico cerrado
                     fig_t.add_trace(go.Scatter(
                         x=serie_pasada['PERIODO'], y=poly(x),
                         name='Tendencia', mode='lines',
                         line=dict(color=ACCENT3, width=2, dash='dot'),
                     ))
 
-                    # 4. Proyección desde último mes cerrado hacia adelante
                     x_ext = [ultimo_cerrado] + fechas_proj
                     y_ext = [float(poly(len(serie_pasada)-1))] + list(y_proj)
                     fig_t.add_trace(go.Scatter(
@@ -604,7 +588,6 @@ if app_mode == "🏥  Oferta de Turnos":
                         fill='tozeroy', fillcolor='rgba(255,107,107,0.08)',
                     ))
 
-                    # 5. Línea vertical "Hoy"
                     fig_t.add_vline(
                         x=hoy.timestamp() * 1000,
                         line_width=1, line_dash="dot", line_color=ACCENT,
@@ -618,7 +601,6 @@ if app_mode == "🏥  Oferta de Turnos":
                     fig_t.update_layout(height=420)
                     st.plotly_chart(fig_t, use_container_width=True)
 
-                    # Tarjetas de proyección
                     cols_p = st.columns(N_PROJ)
                     for i, (fp, yp) in enumerate(zip(fechas_proj, y_proj)):
                         label_p = f"{MESES_FULL[fp.month]} {fp.year}"
@@ -652,7 +634,6 @@ if app_mode == "🏥  Oferta de Turnos":
             agrup_col   = filas_sel[0]
             sorted_meses = sorted(meses_sel)
 
-            # KPIs: una card por cada período seleccionado, con delta vs el anterior
             cols_kpi = st.columns(len(sorted_meses))
             for i, mes in enumerate(sorted_meses):
                 df_mes = df_f[df_f['PERIODO'] == mes]
@@ -671,7 +652,6 @@ if app_mode == "🏥  Oferta de Turnos":
             tab_comp, tab_var, tab_tabla = st.tabs(["📊  Comparación", "📈  Variación", "📄  Tabla"])
 
             with tab_comp:
-                # Gráfico de barras agrupadas por período
                 frames = []
                 for m in sorted_meses:
                     tmp = df_f[df_f['PERIODO'] == m].groupby(agrup_col)[metrica_kpi].sum().reset_index()
@@ -690,7 +670,6 @@ if app_mode == "🏥  Oferta de Turnos":
                 st.plotly_chart(fig, use_container_width=True)
 
             with tab_var:
-                # Tabla de variación entre primer y último período
                 g_base   = df_f[df_f['PERIODO']==sorted_meses[0]].groupby(agrup_col)[metrica_kpi].sum()
                 g_actual = df_f[df_f['PERIODO']==sorted_meses[-1]].groupby(agrup_col)[metrica_kpi].sum()
                 df_var   = pd.DataFrame({fmt_fecha(sorted_meses[0]): g_base, fmt_fecha(sorted_meses[-1]): g_actual}).fillna(0)
@@ -749,8 +728,6 @@ elif app_mode == "🎧  Call Center":
 
     @st.cache_data(ttl=300)
     def cargar_datos_redes():
-        # BD_REDES está en el mismo archivo que BD_CALLCENTER
-        # Reemplazar REDES_GID con el gid real de la pestaña BD_REDES
         url = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTOxpr7RRNTLGO96pUK8HJ0iy2ZHeqNpiR7OelleljCVoWPuJCO26q5z66VisWB76khl7Tmsqh5CqNC/pub?gid=734059738&single=true&output=csv"
         try:
             df = pd.read_csv(url, dtype=str).fillna('')
@@ -758,7 +735,6 @@ elif app_mode == "🎧  Call Center":
             return pd.DataFrame(), str(e)
         df.columns = df.columns.str.strip().str.replace('\n', ' ', regex=False)
 
-        # Renombrar columnas del archivo al nombre estándar del código
         rename_map = {
             'MES'                      : 'MES',
             'INGRESADOS REDES'         : 'INGRESADOS_REDES',
@@ -776,12 +752,10 @@ elif app_mode == "🎧  Call Center":
             m_map = {'ene':1,'feb':2,'mar':3,'abr':4,'may':5,'jun':6,
                      'jul':7,'ago':8,'sep':9,'oct':10,'nov':11,'dic':12,
                      'jan':1,'apr':4,'aug':8,'dec':12}
-            # Try standard datetime first
             try:
                 ts = pd.to_datetime(t, dayfirst=True)
                 if ts.year > 2000: return ts.replace(day=1)
             except: pass
-            # Try "mes-año" format
             for sep in ['-', ' ']:
                 p = t.replace(sep, ' ').split()
                 if len(p) >= 2:
@@ -817,19 +791,17 @@ elif app_mode == "🎧  Call Center":
         return pd.Timestamp(year=int(yr), month=mes, day=1) if mes else None
 
     def tmo_a_segundos(txt):
-        """Convierte '0:03:45' o '3:45' a segundos."""
         if not txt or str(txt).strip() in ['','nan','0']: return None
         try:
             partes = str(txt).strip().split(':')
-            if len(partes) == 3:   # H:MM:SS
+            if len(partes) == 3:
                 return int(partes[0])*3600 + int(partes[1])*60 + int(partes[2])
-            elif len(partes) == 2: # MM:SS
+            elif len(partes) == 2:
                 return int(partes[0])*60 + int(partes[1])
         except: pass
         return None
 
     def seg_a_mmss(seg):
-        """Convierte segundos a string 'Xm Ys'."""
         if seg is None or np.isnan(seg): return "—"
         seg = int(seg)
         return f"{seg//60}m {seg%60:02d}s"
@@ -872,7 +844,6 @@ elif app_mode == "🎧  Call Center":
         except Exception as e:
             return pd.DataFrame(), str(e)
 
-    # Corte de sistema: antes de Jul-2024 los turnos estaban unificados
     CORTE_SISTEMAS = pd.Timestamp('2024-07-01')
 
     try:
@@ -909,7 +880,7 @@ elif app_mode == "🎧  Call Center":
                     unsafe_allow_html=True)
 
         # ══════════════════════════════════════════════════════
-        # VISTA MENSUAL — Teléfono + resumen combinado
+        # VISTA MENSUAL
         # ══════════════════════════════════════════════════════
         if "Mensual" in modo:
             fechas = sorted(df_tel['FECHA_REAL'].unique(), reverse=True)
@@ -993,7 +964,6 @@ elif app_mode == "🎧  Call Center":
                 total_no   = perd + dr['NO_ATENDIDOS_REDES']
                 sla_comb   = (total_aten / total_ing * 100) if total_ing > 0 else 0
 
-                # Advertencia si cruzamos el corte de sistemas
                 if sel < CORTE_SISTEMAS:
                     st.markdown(f"""
                     <div class="insight-box insight-box-amber">
@@ -1009,7 +979,6 @@ elif app_mode == "🎧  Call Center":
                 cb3.markdown(kpi_card("❌ Total No Atendidos", total_no), unsafe_allow_html=True)
                 cb4.markdown(kpi_card("📊 SLA Combinado", sla_comb, suffix="%"), unsafe_allow_html=True)
 
-                # Barras comparativas teléfono vs redes
                 st.markdown("<br>", unsafe_allow_html=True)
                 df_comp_bar = pd.DataFrame({
                     'Canal'    : ['Teléfono','Teléfono','Redes','Redes'],
@@ -1025,7 +994,6 @@ elif app_mode == "🎧  Call Center":
                 fig_comp.update_layout(height=320)
                 st.plotly_chart(fig_comp, use_container_width=True)
 
-                # Turnos combinados (solo desde Jul-2024)
                 if sel >= CORTE_SISTEMAS:
                     st.markdown("<br>", unsafe_allow_html=True)
                     turnos_comb = pd.DataFrame({
@@ -1154,7 +1122,6 @@ elif app_mode == "🎧  Call Center":
                 else:
                     st.info("Datos de turnos por canal disponibles desde Julio 2024.")
 
-            # Evolución histórica redes
             st.markdown("<hr>", unsafe_allow_html=True)
             fig_evo_r = go.Figure()
             fig_evo_r.add_trace(go.Scatter(x=df_red['FECHA_REAL'], y=df_red['INGRESADOS_REDES'],
@@ -1173,7 +1140,6 @@ elif app_mode == "🎧  Call Center":
             fig_evo_r.update_layout(height=300)
             st.plotly_chart(fig_evo_r, use_container_width=True)
 
-            # Evolución de turnos por redes (solo desde Jul-2024)
             df_red_post = df_red[df_red['FECHA_REAL'] >= CORTE_SISTEMAS]
             if not df_red_post.empty and 'TURNOS_TOTAL_REDES' in df_red_post.columns:
                 st.markdown("<hr>", unsafe_allow_html=True)
@@ -1217,7 +1183,6 @@ elif app_mode == "🎧  Call Center":
 
             tab_tel, tab_red = st.tabs(["📞 Teléfono", "📱 Redes Sociales"])
 
-            # ── TELÉFONO ─────────────────────────────────────
             with tab_tel:
                 if not tiene_op_tel:
                     st.info("Sin datos de operadores de teléfono.")
@@ -1241,7 +1206,6 @@ elif app_mode == "🎧  Call Center":
                     d_op = (op_actual - op_ant) if op_ant is not None else None
 
                     tmo_actual = ult['TMO_SEG']
-                    tmo_ant    = ant['TMO_SEG'] if ant is not None else None
 
                     label_per = f"{MESES_FULL[sel_op_tel.month]} {sel_op_tel.year}"
                     st.markdown(f'<div class="section-subtitle">Último período · <span class="badge">{label_per}</span></div>',
@@ -1266,7 +1230,6 @@ elif app_mode == "🎧  Call Center":
 
                     st.markdown("<br>", unsafe_allow_html=True)
 
-                    # Gráfico 1: Dotación + Productividad
                     fig_op = go.Figure()
                     fig_op.add_trace(go.Bar(
                         x=df_op_tel['FECHA_REAL'], y=df_op_tel['OPERADORES'],
@@ -1285,7 +1248,6 @@ elif app_mode == "🎧  Call Center":
                                     title='Llamadas/Op', color=ACCENT))
                     st.plotly_chart(fig_op, use_container_width=True)
 
-                    # Gráfico 2: TMO (solo donde hay dato)
                     df_tmo = df_op_tel[df_op_tel['TMO_SEG'].notna()].copy()
                     if not df_tmo.empty:
                         st.markdown("<hr>", unsafe_allow_html=True)
@@ -1307,7 +1269,6 @@ elif app_mode == "🎧  Call Center":
                         st.caption("⚠️ TMO disponible desde Enero 2025")
                         st.plotly_chart(fig_tmo, use_container_width=True)
 
-            # ── REDES ─────────────────────────────────────────
             with tab_red:
                 if not tiene_op_red:
                     st.info("Sin datos de operadores de redes.")
@@ -1391,7 +1352,6 @@ elif app_mode == "🎧  Call Center":
                         st.caption("⚠️ TMO de redes disponible desde Enero 2025")
                         st.plotly_chart(fig_tmo_r, use_container_width=True)
 
-            # Comparativa dotación teléfono vs redes
             if tiene_op_tel and tiene_op_red:
                 st.markdown("<hr>", unsafe_allow_html=True)
                 st.markdown('<div class="sec-title" style="font-size:16px;">📊 Comparativa dotación — Teléfono vs Redes</div>',
@@ -1426,7 +1386,6 @@ elif app_mode == "🎧  Call Center":
                     st.warning("Sin datos históricos para este mes.")
                 else:
                     df_i['AÑO'] = df_i['FECHA_REAL'].dt.year.astype(str)
-                    # Recalcular SLA para asegurar que todos los años tienen el dato
                     df_i['SLA'] = (df_i['TOTAL_ATENDIDAS'] / df_i['TOTAL_LLAMADAS'] * 100).fillna(0)
                     fig = go.Figure()
                     fig.add_trace(go.Bar(x=df_i['AÑO'], y=df_i['TOTAL_ATENDIDAS'],
@@ -1473,7 +1432,7 @@ elif app_mode == "🎧  Call Center":
                                     range=[0, 110]))
                     st.plotly_chart(fig, use_container_width=True)
 
-            else:  # Combinado
+            else:
                 df_it = df_tel[df_tel['FECHA_REAL'].dt.month == m_num].copy()
                 df_ir = df_red[df_red['FECHA_REAL'].dt.month == m_num].copy()
 
@@ -1483,7 +1442,6 @@ elif app_mode == "🎧  Call Center":
                     df_it['AÑO'] = df_it['FECHA_REAL'].dt.year.astype(str)
                     df_ir['AÑO'] = df_ir['FECHA_REAL'].dt.year.astype(str)
 
-                    # Mostrar solo años donde AMBOS canales tienen dato
                     años_tel = set(df_it['AÑO'])
                     años_red = set(df_ir['AÑO'])
                     años_comunes = años_tel & años_red
@@ -1518,7 +1476,6 @@ elif app_mode == "🎧  Call Center":
         st.exception(e)
 
 
-
 # ============================================================
 # APP 3: AUSENTISMO
 # ============================================================
@@ -1535,7 +1492,6 @@ elif app_mode == "📉  Ausentismo":
     try:
         df_aus = cargar_ausencias()
 
-        # Detectar columna de métrica principal
         if 'CONSULTORIOS_REALES' in df_aus.columns:
             col_target = 'CONSULTORIOS_REALES'
             label_target = "Consultorios Cancelados"
@@ -1565,7 +1521,6 @@ elif app_mode == "📉  Ausentismo":
             if meses_sel: df_y = df_y[df_y['MES_NUM'].isin(meses_sel)]
 
             st.markdown("<hr>", unsafe_allow_html=True)
-            # Filtro cruzado — leer session_state de Turnos
             cross_srv = st.session_state.get('cross_servicio', [])
             cross_dpt = st.session_state.get('cross_depto', [])
             if cross_srv or cross_dpt:
@@ -1579,7 +1534,6 @@ elif app_mode == "📉  Ausentismo":
             for col in ['DEPARTAMENTO','SERVICIO','MOTIVO','PROFESIONAL']:
                 if col in df_y.columns:
                     opciones = sorted(df_y[col].astype(str).unique())
-                    # Pre-cargar desde session_state si corresponde
                     if col == 'SERVICIO' and cross_srv:
                         default_val = [s for s in cross_srv if s in opciones]
                     elif col == 'DEPARTAMENTO' and cross_dpt:
@@ -1597,7 +1551,6 @@ elif app_mode == "📉  Ausentismo":
         meses_badge = " · ".join([MESES_FULL.get(m, str(m)) for m in sorted(meses_sel)])
         st.markdown(f'<div class="section-subtitle">Año {año_sel} · <span class="badge">{meses_badge}</span></div>', unsafe_allow_html=True)
 
-        # KPIs
         total_cancel  = df_y[col_target].sum()
         n_eventos     = len(df_y)
         n_profs       = df_y['PROFESIONAL'].nunique() if 'PROFESIONAL' in df_y.columns else 0
@@ -1607,8 +1560,6 @@ elif app_mode == "📉  Ausentismo":
         c1.markdown(kpi_card(label_target, total_cancel), unsafe_allow_html=True)
         c2.markdown(kpi_card("Eventos / Licencias", n_eventos), unsafe_allow_html=True)
         c3.markdown(kpi_card("Profesionales", n_profs), unsafe_allow_html=True)
-
-        # Para motivo principal usamos métrica nativa (string, no numérico)
         c4.metric("Motivo Principal", str(top_motivo))
 
         st.markdown("<br>", unsafe_allow_html=True)
@@ -1617,7 +1568,6 @@ elif app_mode == "📉  Ausentismo":
 
         with col1:
             if 'MOTIVO' in df_y.columns:
-                # Agrupar motivos menores en "Otros" — solo Top 8 visibles
                 df_mot_full = df_y.groupby('MOTIVO')[col_target].sum().reset_index().sort_values(col_target, ascending=False)
                 TOP_N = 8
                 if len(df_mot_full) > TOP_N:
@@ -1666,13 +1616,11 @@ elif app_mode == "📉  Ausentismo":
                 fig_hs.update_layout(height=420)
                 st.plotly_chart(fig_hs, use_container_width=True)
 
-        # Top profesionales — tooltip con desglose de motivos para cada uno
         if 'PROFESIONAL' in df_y.columns:
             st.markdown("<hr>", unsafe_allow_html=True)
             d_prof = df_y.groupby('PROFESIONAL')[col_target].sum().reset_index()\
                          .sort_values(col_target).tail(15)
 
-            # Construir texto de tooltip con desglose de motivos por profesional
             if 'MOTIVO' in df_y.columns:
                 def motivos_tooltip(prof_nombre):
                     sub = df_y[df_y['PROFESIONAL'] == prof_nombre]\
@@ -1716,7 +1664,6 @@ elif app_mode == "📉  Ausentismo":
             fig_p.update_layout(height=max(420, len(d_prof)*30))
             st.plotly_chart(fig_p, use_container_width=True)
 
-        # Evolución mensual
         st.markdown("<hr>", unsafe_allow_html=True)
         df_y_evo = df_y.copy()
         df_y_evo['MES_LABEL'] = df_y_evo['FECHA_INICIO'].dt.month.map(MESES_FULL)
