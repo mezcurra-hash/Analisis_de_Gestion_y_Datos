@@ -55,7 +55,9 @@ st.markdown(f"""
   html, body, [class*="css"] {{
       font-family: 'DM Sans', sans-serif;
   }}
-  #MainMenu, footer, header {{ visibility: hidden; }}
+  #MainMenu, footer {{ visibility: hidden; }}
+  [data-testid="stHeader"] {{ visibility: hidden; }}
+  [data-testid="collapsedControl"] {{ visibility: visible !important; }}
 
   /* ── Fondo general ── */
   .stApp {{ background-color: #13151F; }}
