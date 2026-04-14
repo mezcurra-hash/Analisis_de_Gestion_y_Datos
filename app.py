@@ -423,7 +423,19 @@ if app_mode == "🏥  Oferta de Turnos":
 
             with st.expander("🔍  Filtros"):
                 filtro_tipo = st.radio("Modalidad", ["Todos","AP","ANP"], horizontal=True)
-                depto = st.multiselect("Departamento", sorted(df['DEPARTAMENTO'].astype(str).unique()),
+                departamentos = (
+                    df['DEPARTAMENTO']
+                    .fillna('Sin dato')    # opcional: en vez de borrar, los agrupa
+                    .astype(str)
+                    .str.strip()
+                    .replace('', 'Sin dato')
+                    .unique()
+                )
+
+            depto = st.multiselect(
+                "Departamento",
+                sorted(departamentos)
+                ),
                                        default=st.session_state['cross_depto'] if st.session_state['cross_depto'] else [])
                 serv  = st.multiselect("Servicio",     sorted(df['SERVICIO'].astype(str).unique()),
                                        default=st.session_state['cross_servicio'] if st.session_state['cross_servicio'] else [])
