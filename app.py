@@ -5,7 +5,6 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import io
 import numpy as np
-
 # PDF opcional — requiere: pip install reportlab
 try:
     from reportlab.lib.pagesizes import A4, landscape
@@ -15,7 +14,6 @@ try:
     PDF_OK = True
 except ImportError:
     PDF_OK = False
-
 # ============================================================
 # CONFIGURACIÓN GLOBAL
 # ============================================================
@@ -25,19 +23,17 @@ st.set_page_config(
     page_icon="🏥",
     initial_sidebar_state="auto"
 )
-
 # ============================================================
 # PALETA Y ESTILOS GLOBALES
 # ============================================================
-ACCENT      = "#00BFA5"   # Teal principal
-ACCENT2     = "#FF6B6B"   # Rojo suave para negativo
-ACCENT3     = "#FFB74D"   # Ámbar para neutro/advertencia
+ACCENT      = "#00BFA5"
+ACCENT2     = "#FF6B6B"
+ACCENT3     = "#FFB74D"
 BLUE_LIGHT  = "#4FC3F7"
 BLUE_DARK   = "#0277BD"
 CARD_BG     = "#1E2130"
 BORDER      = "#2D3250"
 TEXT_MUTED  = "#8B93A7"
-
 PLOTLY_TEMPLATE = "plotly_dark"
 PLOTLY_LAYOUT = dict(
     template=PLOTLY_TEMPLATE,
@@ -47,20 +43,14 @@ PLOTLY_LAYOUT = dict(
     margin=dict(l=10, r=10, t=40, b=10),
     legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
 )
-
 st.markdown(f"""
 <style>
   @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=DM+Mono:wght@400;500&display=swap');
-
   html, body, [class*="css"] {{
       font-family: 'DM Sans', sans-serif;
   }}
   #MainMenu, footer, header {{ visibility: hidden; }}
-
-  /* ── Fondo general ── */
   .stApp {{ background-color: #13151F; }}
-
-  /* ── Sidebar ── */
   [data-testid="stSidebar"] {{
       background-color: #171925 !important;
       border-right: 1px solid {BORDER};
@@ -74,8 +64,6 @@ st.markdown(f"""
       text-transform: uppercase;
       color: {TEXT_MUTED} !important;
   }}
-
-  /* ── Tarjetas KPI ── */
   .kpi-card {{
       background: {CARD_BG};
       border: 1px solid {BORDER};
@@ -124,8 +112,6 @@ st.markdown(f"""
       color: {ACCENT3};
       margin-top: 6px;
   }}
-
-  /* ── Tabs ── */
   .stTabs [data-baseweb="tab-list"] {{
       background: {CARD_BG};
       border-radius: 8px;
@@ -144,14 +130,8 @@ st.markdown(f"""
       color: #13151F !important;
       font-weight: 700;
   }}
-
-  /* ── Dataframe ── */
   [data-testid="stDataFrame"] {{ border-radius: 10px; overflow: hidden; }}
-
-  /* ── Dividers ── */
   hr {{ border-color: {BORDER} !important; opacity: 0.5; }}
-
-  /* ── Títulos de sección ── */
   .section-header {{
       display: flex;
       align-items: center;
@@ -168,8 +148,6 @@ st.markdown(f"""
       color: {TEXT_MUTED};
       margin-bottom: 20px;
   }}
-
-  /* ── Badge de período ── */
   .badge {{
       display: inline-block;
       background: rgba(0,191,165,0.15);
@@ -180,23 +158,17 @@ st.markdown(f"""
       font-size: 12px;
       font-weight: 600;
   }}
-
-  /* ── Expander ── */
   [data-testid="stExpander"] {{
       background: {CARD_BG};
       border: 1px solid {BORDER} !important;
       border-radius: 10px;
   }}
-
-  /* ── Métricas nativas (fallback) ── */
   div[data-testid="stMetric"] {{
       background-color: {CARD_BG};
       border: 1px solid {BORDER};
       padding: 14px 18px;
       border-radius: 12px;
   }}
-
-  /* ── KPI alerta (SLA bajo meta) ── */
   .kpi-card-alert {{
       background: {CARD_BG};
       border: 1px solid {ACCENT2} !important;
@@ -225,7 +197,6 @@ st.markdown(f"""
   }}
 </style>
 """, unsafe_allow_html=True)
-
 # ============================================================
 # HELPERS
 # ============================================================
@@ -233,15 +204,11 @@ MESES = {1:"Ene",2:"Feb",3:"Mar",4:"Abr",5:"May",6:"Jun",
          7:"Jul",8:"Ago",9:"Sep",10:"Oct",11:"Nov",12:"Dic"}
 MESES_FULL = {1:"Enero",2:"Febrero",3:"Marzo",4:"Abril",5:"Mayo",6:"Junio",
               7:"Julio",8:"Agosto",9:"Septiembre",10:"Octubre",11:"Noviembre",12:"Diciembre"}
-
 def fmt_fecha(fecha):
     return f"{MESES_FULL[fecha.month]} {fecha.year}"
-
 def fmt_num(n, decimals=0):
     return f"{n:,.{decimals}f}".replace(",", "X").replace(".", ",").replace("X", ".")
-
 def kpi_card(label, value, delta=None, delta_pct=None, prefix="", suffix="", alert=False):
-    """Renderiza una tarjeta KPI custom con HTML. alert=True activa borde rojo."""
     val_str = f"{prefix}{fmt_num(value)}{suffix}"
     delta_html = ""
     if delta is not None:
@@ -260,7 +227,9 @@ def kpi_card(label, value, delta=None, delta_pct=None, prefix="", suffix="", ale
         {alert_html}
     </div>
     """
-
+def safe_opts(series):
+    """Devuelve lista ordenada de strings únicos, sin NaN ni 'nan'."""
+    return sorted([str(x) for x in series.unique() if pd.notna(x) and str(x).strip().lower() != 'nan'])
 # ============================================================
 # HELPERS — EXPORTACIÓN
 # ============================================================
@@ -269,7 +238,6 @@ def generar_excel(df: pd.DataFrame, nombre_hoja: str = "Datos") -> bytes:
     with pd.ExcelWriter(buf, engine="openpyxl") as writer:
         df.to_excel(writer, sheet_name=nombre_hoja, index=True)
     return buf.getvalue()
-
 def generar_pdf(df: pd.DataFrame, titulo: str = "Reporte CEMIC") -> bytes:
     if not PDF_OK:
         return b""
@@ -279,15 +247,10 @@ def generar_pdf(df: pd.DataFrame, titulo: str = "Reporte CEMIC") -> bytes:
                             topMargin=30, bottomMargin=20)
     styles = getSampleStyleSheet()
     elements = []
-
-    # Título
     elements.append(Paragraph(titulo, styles['Title']))
     elements.append(Spacer(1, 12))
-
-    # Reset index para incluirlo como columna
     df_reset = df.reset_index()
     data = [list(df_reset.columns)] + df_reset.astype(str).values.tolist()
-
     t = Table(data, repeatRows=1)
     t.setStyle(TableStyle([
         ('BACKGROUND', (0,0), (-1,0), rl_colors.HexColor('#1E2130')),
@@ -305,9 +268,7 @@ def generar_pdf(df: pd.DataFrame, titulo: str = "Reporte CEMIC") -> bytes:
     elements.append(t)
     doc.build(elements)
     return buf.getvalue()
-
 def botones_exportacion(df: pd.DataFrame, nombre_archivo: str, titulo_pdf: str):
-    """Renderiza los botones de descarga Excel y PDF lado a lado."""
     col_xl, col_pdf, _ = st.columns([1, 1, 4])
     excel_bytes = generar_excel(df, nombre_archivo[:31])
     col_xl.download_button(
@@ -328,7 +289,6 @@ def botones_exportacion(df: pd.DataFrame, nombre_archivo: str, titulo_pdf: str):
         )
     else:
         col_pdf.caption("PDF: instalar reportlab")
-
 # ============================================================
 # SESSION STATE — Filtro cruzado entre módulos
 # ============================================================
@@ -337,6 +297,18 @@ if 'cross_servicio' not in st.session_state:
 if 'cross_depto' not in st.session_state:
     st.session_state['cross_depto'] = []
 
+# ── FIX DOBLE CLIC: inicializar keys de widgets de filtro ──
+# Streamlit maneja el estado internamente cuando se usa key=,
+# eliminando el conflicto entre default= y el ciclo de rerun.
+if 'oferta_depto' not in st.session_state:
+    st.session_state['oferta_depto'] = []
+if 'oferta_serv' not in st.session_state:
+    st.session_state['oferta_serv'] = []
+if 'oferta_sede' not in st.session_state:
+    st.session_state['oferta_sede'] = []
+if 'oferta_prof' not in st.session_state:
+    st.session_state['oferta_prof'] = []
+
 def apply_plotly_defaults(fig, title=""):
     fig.update_layout(**PLOTLY_LAYOUT)
     if title:
@@ -344,7 +316,6 @@ def apply_plotly_defaults(fig, title=""):
     fig.update_xaxes(showgrid=False, zeroline=False)
     fig.update_yaxes(showgrid=True, gridcolor=BORDER, zeroline=False)
     return fig
-
 # ============================================================
 # SIDEBAR — NAVEGACIÓN
 # ============================================================
@@ -359,15 +330,12 @@ with st.sidebar:
         </div>
     </div>
     """, unsafe_allow_html=True)
-
     app_mode = st.selectbox(
         "MÓDULO",
         ["🏥  Oferta de Turnos", "🎧  Call Center", "📉  Ausentismo"],
         label_visibility="collapsed"
     )
     st.markdown("<hr>", unsafe_allow_html=True)
-
-# Hint de reapertura cuando sidebar está colapsado
 st.markdown(f"""
 <div style="position:fixed; bottom:16px; left:16px; z-index:9999;
             background:{ACCENT}; color:#13151F; border-radius:20px;
@@ -377,13 +345,14 @@ st.markdown(f"""
     ☰ Menú — presioná [
 </div>
 """, unsafe_allow_html=True)
-
 # ============================================================
 # APP 1: OFERTA DE TURNOS
 # ============================================================
 if app_mode == "🏥  Oferta de Turnos":
-
-    @st.cache_data(ttl=300)
+    # ── FIX PERFORMANCE: TTL subido a 3600 (1 hora) ──
+    # Con ttl=300, el caché expiraba cada 5 min y forzaba una nueva
+    # descarga desde Google Sheets, causando lentitud en uso prolongado.
+    @st.cache_data(ttl=3600)
     def cargar_datos_oferta():
         url = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQHFwl-Dxn-Rw9KN_evkCMk2Er8lQqgZMzAtN4LuEkWcCeBVUNwgb8xeIFKvpyxMgeGTeJ3oEWKpMZj/pub?gid=1524527213&single=true&output=csv"
         df = pd.read_csv(url)
@@ -393,18 +362,14 @@ if app_mode == "🏥  Oferta de Turnos":
                 df[col] = df[col].astype(str).str.strip().str.upper()
         df['PERIODO'] = pd.to_datetime(df['PERIODO'], dayfirst=True, errors='coerce')
         return df.dropna(subset=['PERIODO'])
-
     try:
         df = cargar_datos_oferta()
-
         # ── Sidebar: controles ──────────────────────────────
         with st.sidebar:
             st.markdown(f"<div style='font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:{TEXT_MUTED};margin-bottom:8px;'>VISTA</div>", unsafe_allow_html=True)
             modo = st.radio("", ["📊  Global", "🆚  Comparativa"], label_visibility="collapsed")
-
             st.markdown("<br>", unsafe_allow_html=True)
             fechas = sorted(df['PERIODO'].unique())
-
             if "Global" in modo:
                 meses_sel = st.multiselect("PERÍODO", fechas, default=[fechas[-1]], format_func=fmt_fecha)
                 periodos_para_comparar = None
@@ -418,42 +383,57 @@ if app_mode == "🏥  Oferta de Turnos":
                     max_selections=4
                 )
                 periodos_para_comparar = meses_sel
-
             st.markdown("<hr>", unsafe_allow_html=True)
-
             with st.expander("🔍  Filtros"):
                 filtro_tipo = st.radio("Modalidad", ["Todos","AP","ANP"], horizontal=True)
-                depto = st.multiselect("Departamento", sorted(df['DEPARTAMENTO'].astype(str).unique()),
-                                       default=st.session_state['cross_depto'] if st.session_state['cross_depto'] else [])
-                serv  = st.multiselect("Servicio",     sorted(df['SERVICIO'].astype(str).unique()),
-                                       default=st.session_state['cross_servicio'] if st.session_state['cross_servicio'] else [])
-                sede  = st.multiselect("Sede",         sorted(df['SEDE'].astype(str).unique()))
+
+                # ── FIX DOBLE CLIC: usar key= en lugar de default= ──
+                # Sin key=, Streamlit recalcula default en cada rerun y
+                # "pisa" la selección antes de que el usuario la confirme,
+                # obligando a seleccionar dos veces. Con key=, el estado
+                # queda en session_state y Streamlit no lo sobreescribe.
+                depto = st.multiselect(
+                    "Departamento",
+                    safe_opts(df['DEPARTAMENTO']),
+                    key='oferta_depto'
+                )
+                serv = st.multiselect(
+                    "Servicio",
+                    safe_opts(df['SERVICIO']),
+                    key='oferta_serv'
+                )
+                sede = st.multiselect(
+                    "Sede",
+                    safe_opts(df['SEDE']),
+                    key='oferta_sede'
+                )
                 if 'PROFESIONAL/EQUIPO' in df.columns:
-                    prof = st.multiselect("Profesional", sorted(df['PROFESIONAL/EQUIPO'].astype(str).unique()))
+                    prof = st.multiselect(
+                        "Profesional",
+                        safe_opts(df['PROFESIONAL/EQUIPO']),
+                        key='oferta_prof'
+                    )
                 else:
                     prof = []
-                # Guardar selección para filtro cruzado
+
+                # Sincronizar con filtro cruzado (para Ausentismo)
                 st.session_state['cross_servicio'] = serv
                 st.session_state['cross_depto']    = depto
+
                 if serv or depto:
                     st.caption(f"🔗 Filtro activo · se aplicará en Ausentismo")
-
             st.markdown("<hr>", unsafe_allow_html=True)
-
             cols_txt = df.select_dtypes(include=['object']).columns.tolist()
             cols_num = df.select_dtypes(include=['float','int']).columns.tolist()
             default_fila = ['SERVICIO'] if 'SERVICIO' in cols_txt else [cols_txt[0]]
             filas_sel = st.multiselect("AGRUPAR POR", cols_txt, default=default_fila)
             val_sel   = st.multiselect("MÉTRICAS", cols_num,
                                        default=['TURNOS_MENSUAL'] if 'TURNOS_MENSUAL' in cols_num else [cols_num[0]])
-
         # ── Título ──────────────────────────────────────────
         st.markdown('<div class="section-header"><span class="section-title">🏥 Oferta de Turnos de Consultorio</span></div>', unsafe_allow_html=True)
-
         if not meses_sel or not filas_sel or not val_sel:
             st.info("Seleccioná al menos un período, un agrupador y una métrica.")
             st.stop()
-
         # ── Filtrado ─────────────────────────────────────────
         df_f = df[df['PERIODO'].isin(meses_sel)].copy()
         if filtro_tipo == "AP"  and 'TIPO_ATENCION' in df_f.columns: df_f = df_f[df_f['TIPO_ATENCION']=='AP']
@@ -463,23 +443,18 @@ if app_mode == "🏥  Oferta de Turnos":
         if sede:  df_f = df_f[df_f['SEDE'].isin(sede)]
         if prof and 'PROFESIONAL/EQUIPO' in df_f.columns:
             df_f = df_f[df_f['PROFESIONAL/EQUIPO'].isin(prof)]
-
         if df_f.empty:
             st.warning("No hay datos para los filtros seleccionados.")
             st.stop()
-
         # ════════════════════════════════════════════════════
         # VISTA GLOBAL
         # ════════════════════════════════════════════════════
         if "Global" in modo:
             nombres = " · ".join([fmt_fecha(m) for m in sorted(meses_sel)])
             st.markdown(f'<div class="section-subtitle">Vista global · <span class="badge">{nombres}</span> · Modalidad: {filtro_tipo}</div>', unsafe_allow_html=True)
-
-            # KPIs con delta vs período anterior al primero seleccionado
             primer_mes = min(meses_sel)
             idx_ant = fechas.index(primer_mes) - 1 if fechas.index(primer_mes) > 0 else None
             df_ant = df[df['PERIODO'] == fechas[idx_ant]] if idx_ant is not None else None
-
             cols_kpi = st.columns(len(val_sel))
             for i, metrica in enumerate(val_sel):
                 val_actual = df_f[metrica].sum()
@@ -490,15 +465,17 @@ if app_mode == "🏥  Oferta de Turnos":
                     delta_pct = (delta / val_prev * 100) if val_prev > 0 else 0
                 label = metrica.replace("_"," ").title()
                 cols_kpi[i].markdown(kpi_card(label, val_actual, delta, delta_pct), unsafe_allow_html=True)
-
             st.markdown("<br>", unsafe_allow_html=True)
-            tab_graf, tab_tabla, tab_trend = st.tabs(["📊  Gráfico", "📄  Tabla dinámica", "📈  Tendencia"])
+
+            # ── NUEVA PESTAÑA: Profesionales ──────────────────
+            tab_graf, tab_tabla, tab_trend, tab_profs = st.tabs([
+                "📊  Gráfico", "📄  Tabla dinámica", "📈  Tendencia", "👨‍⚕️  Profesionales"
+            ])
 
             with tab_graf:
                 agrup_col = filas_sel[0]
                 metrica_graf = val_sel[0]
                 df_agg = df_f.groupby(agrup_col)[metrica_graf].sum().reset_index().sort_values(metrica_graf, ascending=False)
-
                 fig = px.bar(
                     df_agg, x=agrup_col, y=metrica_graf,
                     text=metrica_graf,
@@ -511,7 +488,6 @@ if app_mode == "🏥  Oferta de Turnos":
                 apply_plotly_defaults(fig, f"{metrica_graf.replace('_',' ').title()} por {agrup_col.title()}")
                 fig.update_layout(height=460, xaxis_tickangle=-50)
                 st.plotly_chart(fig, use_container_width=True)
-
             with tab_tabla:
                 tabla = pd.pivot_table(df_f, index=filas_sel, values=val_sel,
                                        aggfunc='sum', margins=True, margins_name='TOTAL')
@@ -526,46 +502,31 @@ if app_mode == "🏥  Oferta de Turnos":
                     nombre_archivo=f"turnos_{'-'.join([fmt_fecha(m).replace(' ','_') for m in sorted(meses_sel)])}",
                     titulo_pdf=f"Oferta de Turnos — {nombres}"
                 )
-
             with tab_trend:
                 metrica_t = val_sel[0]
-
-                # Serie completa — aplicar filtros pero NO filtro de período
                 df_hist = df.copy()
                 if filtro_tipo == "AP"  and 'TIPO_ATENCION' in df_hist.columns: df_hist = df_hist[df_hist['TIPO_ATENCION']=='AP']
                 if filtro_tipo == "ANP" and 'TIPO_ATENCION' in df_hist.columns: df_hist = df_hist[df_hist['TIPO_ATENCION']=='ANP']
                 if depto: df_hist = df_hist[df_hist['DEPARTAMENTO'].isin(depto)]
                 if serv:  df_hist = df_hist[df_hist['SERVICIO'].isin(serv)]
-
                 serie_completa = df_hist.groupby('PERIODO')[metrica_t].sum().reset_index().sort_values('PERIODO')
-
-                # Separar meses cerrados de meses futuros
-                # El mes en curso se incluye en el histórico (ya tiene datos cargados)
-                # La proyección arranca desde el mes siguiente al actual
                 hoy          = pd.Timestamp.today().normalize()
-                corte        = (hoy.replace(day=1) + pd.DateOffset(months=1))  # Primer día del mes siguiente
+                corte        = (hoy.replace(day=1) + pd.DateOffset(months=1))
                 serie_pasada = serie_completa[serie_completa['PERIODO'] < corte]
                 serie_futura = serie_completa[serie_completa['PERIODO'] >= corte]
-
                 if len(serie_pasada) < 3:
                     st.info("Se necesitan al menos 3 meses cerrados para calcular la tendencia.")
                 else:
-                    # Regresión lineal SOLO sobre meses cerrados
                     x    = np.arange(len(serie_pasada))
                     y    = serie_pasada[metrica_t].values
                     coef = np.polyfit(x, y, 1)
                     poly = np.poly1d(coef)
-
-                    # Proyección: 3 meses desde el último mes cerrado
                     N_PROJ      = 3
                     ultimo_cerrado = serie_pasada['PERIODO'].max()
                     fechas_proj = [ultimo_cerrado + pd.DateOffset(months=i+1) for i in range(N_PROJ)]
                     x_proj      = np.arange(len(serie_pasada), len(serie_pasada) + N_PROJ)
                     y_proj      = poly(x_proj)
-
                     fig_t = go.Figure()
-
-                    # 1. Histórico real (meses cerrados)
                     fig_t.add_trace(go.Scatter(
                         x=serie_pasada['PERIODO'], y=serie_pasada[metrica_t],
                         name='Histórico (cerrado)', mode='lines+markers',
@@ -573,8 +534,6 @@ if app_mode == "🏥  Oferta de Turnos":
                         marker=dict(size=6),
                         fill='tozeroy', fillcolor='rgba(79,195,247,0.1)',
                     ))
-
-                    # 2. Oferta futura cargada (AP solamente — referencia visual, no entra en regresión)
                     if not serie_futura.empty:
                         fig_t.add_trace(go.Scatter(
                             x=serie_futura['PERIODO'], y=serie_futura[metrica_t],
@@ -583,15 +542,11 @@ if app_mode == "🏥  Oferta de Turnos":
                             marker=dict(size=6, symbol='circle-open'),
                             opacity=0.5,
                         ))
-
-                    # 3. Línea de tendencia sobre el histórico cerrado
                     fig_t.add_trace(go.Scatter(
                         x=serie_pasada['PERIODO'], y=poly(x),
                         name='Tendencia', mode='lines',
                         line=dict(color=ACCENT3, width=2, dash='dot'),
                     ))
-
-                    # 4. Proyección desde último mes cerrado hacia adelante
                     x_ext = [ultimo_cerrado] + fechas_proj
                     y_ext = [float(poly(len(serie_pasada)-1))] + list(y_proj)
                     fig_t.add_trace(go.Scatter(
@@ -601,8 +556,6 @@ if app_mode == "🏥  Oferta de Turnos":
                         marker=dict(size=8, symbol='diamond'),
                         fill='tozeroy', fillcolor='rgba(255,107,107,0.08)',
                     ))
-
-                    # 5. Línea vertical "Hoy"
                     fig_t.add_vline(
                         x=hoy.timestamp() * 1000,
                         line_width=1, line_dash="dot", line_color=ACCENT,
@@ -610,18 +563,14 @@ if app_mode == "🏥  Oferta de Turnos":
                         annotation_font_color=ACCENT,
                         annotation_position="top right",
                     )
-
                     pendiente_dir = "creciente 📈" if coef[0] > 0 else "decreciente 📉"
                     apply_plotly_defaults(fig_t, f"Tendencia y proyección · {metrica_t.replace('_',' ').title()}")
                     fig_t.update_layout(height=420)
                     st.plotly_chart(fig_t, use_container_width=True)
-
-                    # Tarjetas de proyección
                     cols_p = st.columns(N_PROJ)
                     for i, (fp, yp) in enumerate(zip(fechas_proj, y_proj)):
                         label_p = f"{MESES_FULL[fp.month]} {fp.year}"
                         cols_p[i].markdown(kpi_card(f"Proyección {label_p}", max(0, yp)), unsafe_allow_html=True)
-
                     n_meses_usados = len(serie_pasada)
                     st.markdown(f"""
                     <div style="margin-top:12px; padding:10px 14px; background:{CARD_BG};
@@ -635,22 +584,115 @@ if app_mode == "🏥  Oferta de Turnos":
                     </div>
                     """, unsafe_allow_html=True)
 
+            # ════════════════════════════════════════════════
+            # NUEVA PESTAÑA: RECUENTO DE PROFESIONALES
+            # ════════════════════════════════════════════════
+            with tab_profs:
+                tiene_prof = 'PROFESIONAL/EQUIPO' in df_f.columns
+                if not tiene_prof:
+                    st.info("No hay columna PROFESIONAL/EQUIPO en los datos.")
+                else:
+                    # KPIs resumen
+                    total_profs   = df_f['PROFESIONAL/EQUIPO'].nunique()
+                    total_servs   = df_f['SERVICIO'].nunique() if 'SERVICIO' in df_f.columns else 0
+                    total_deptos  = df_f['DEPARTAMENTO'].nunique() if 'DEPARTAMENTO' in df_f.columns else 0
+                    prom_por_serv = round(total_profs / total_servs, 1) if total_servs > 0 else 0
+
+                    kc1, kc2, kc3, kc4 = st.columns(4)
+                    kc1.markdown(kpi_card("👨‍⚕️ Total Profesionales", total_profs), unsafe_allow_html=True)
+                    kc2.markdown(kpi_card("🏷️ Servicios activos", total_servs), unsafe_allow_html=True)
+                    kc3.markdown(kpi_card("🏢 Departamentos activos", total_deptos), unsafe_allow_html=True)
+                    kc4.markdown(kpi_card("📊 Promedio prof./servicio", prom_por_serv), unsafe_allow_html=True)
+
+                    st.markdown("<br>", unsafe_allow_html=True)
+
+                    # Gráficos: por Servicio y por Departamento
+                    col_ps, col_pd = st.columns(2)
+
+                    with col_ps:
+                        df_prof_serv = (
+                            df_f.groupby('SERVICIO')['PROFESIONAL/EQUIPO']
+                            .nunique()
+                            .reset_index()
+                            .rename(columns={'PROFESIONAL/EQUIPO': 'PROFESIONALES'})
+                            .sort_values('PROFESIONALES', ascending=False)
+                        )
+                        fig_ps = px.bar(
+                            df_prof_serv, x='SERVICIO', y='PROFESIONALES',
+                            text='PROFESIONALES', color='PROFESIONALES',
+                            color_continuous_scale=[[0, BLUE_DARK],[0.5, BLUE_LIGHT],[1, ACCENT]],
+                        )
+                        fig_ps.update_traces(
+                            texttemplate='%{text}', textposition='outside', marker_line_width=0
+                        )
+                        fig_ps.update_coloraxes(showscale=False)
+                        apply_plotly_defaults(fig_ps, "Profesionales únicos por Servicio")
+                        fig_ps.update_layout(height=460, xaxis_tickangle=-50)
+                        st.plotly_chart(fig_ps, use_container_width=True)
+
+                    with col_pd:
+                        df_prof_depto = (
+                            df_f.groupby('DEPARTAMENTO')['PROFESIONAL/EQUIPO']
+                            .nunique()
+                            .reset_index()
+                            .rename(columns={'PROFESIONAL/EQUIPO': 'PROFESIONALES'})
+                            .sort_values('PROFESIONALES', ascending=False)
+                        )
+                        fig_pd = px.bar(
+                            df_prof_depto, x='DEPARTAMENTO', y='PROFESIONALES',
+                            text='PROFESIONALES', color='PROFESIONALES',
+                            color_continuous_scale=[[0, BLUE_DARK],[0.5, ACCENT3],[1, ACCENT2]],
+                        )
+                        fig_pd.update_traces(
+                            texttemplate='%{text}', textposition='outside', marker_line_width=0
+                        )
+                        fig_pd.update_coloraxes(showscale=False)
+                        apply_plotly_defaults(fig_pd, "Profesionales únicos por Departamento")
+                        fig_pd.update_layout(height=460, xaxis_tickangle=-50)
+                        st.plotly_chart(fig_pd, use_container_width=True)
+
+                    # Tabla detallada: Departamento × Servicio con listado de profesionales
+                    st.markdown("<hr>", unsafe_allow_html=True)
+                    st.markdown(f"""
+                    <div class="section-subtitle">
+                        Detalle por Departamento y Servicio
+                        <span class="badge">profesionales únicos</span>
+                    </div>
+                    """, unsafe_allow_html=True)
+
+                    df_detalle = (
+                        df_f.groupby(['DEPARTAMENTO', 'SERVICIO'])['PROFESIONAL/EQUIPO']
+                        .agg(
+                            PROFESIONALES='nunique',
+                            LISTADO=lambda x: ', '.join(sorted(x.dropna().unique()))
+                        )
+                        .reset_index()
+                        .sort_values(['DEPARTAMENTO', 'PROFESIONALES'], ascending=[True, False])
+                    )
+                    st.dataframe(
+                        df_detalle.style.bar(subset=['PROFESIONALES'], color=BLUE_LIGHT),
+                        use_container_width=True,
+                        height=400,
+                    )
+                    st.markdown("<br>", unsafe_allow_html=True)
+                    botones_exportacion(
+                        df_detalle.set_index(['DEPARTAMENTO','SERVICIO']),
+                        nombre_archivo=f"profesionales_{'-'.join([fmt_fecha(m).replace(' ','_') for m in sorted(meses_sel)])}",
+                        titulo_pdf=f"Profesionales por Servicio/Depto — {nombres}"
+                    )
+
         # ════════════════════════════════════════════════════
-        # VISTA COMPARATIVA (multi-período)
+        # VISTA COMPARATIVA
         # ════════════════════════════════════════════════════
         else:
             if len(meses_sel) < 2:
                 st.info("Seleccioná al menos 2 períodos para comparar.")
                 st.stop()
-
             nombres = " vs ".join([fmt_fecha(m) for m in sorted(meses_sel)])
             st.markdown(f'<div class="section-subtitle">Comparativa · <span class="badge">{nombres}</span> · Modalidad: {filtro_tipo}</div>', unsafe_allow_html=True)
-
             metrica_kpi = val_sel[0]
             agrup_col   = filas_sel[0]
             sorted_meses = sorted(meses_sel)
-
-            # KPIs: una card por cada período seleccionado, con delta vs el anterior
             cols_kpi = st.columns(len(sorted_meses))
             for i, mes in enumerate(sorted_meses):
                 df_mes = df_f[df_f['PERIODO'] == mes]
@@ -663,20 +705,15 @@ if app_mode == "🏥  Oferta de Turnos":
                     dlt = valor - val_ant
                     pct = (dlt / val_ant * 100) if val_ant > 0 else 0
                     cols_kpi[i].markdown(kpi_card(label, valor, dlt, pct), unsafe_allow_html=True)
-
             st.markdown("<br>", unsafe_allow_html=True)
-
             tab_comp, tab_var, tab_tabla = st.tabs(["📊  Comparación", "📈  Variación", "📄  Tabla"])
-
             with tab_comp:
-                # Gráfico de barras agrupadas por período
                 frames = []
                 for m in sorted_meses:
                     tmp = df_f[df_f['PERIODO'] == m].groupby(agrup_col)[metrica_kpi].sum().reset_index()
                     tmp['Período'] = fmt_fecha(m)
                     frames.append(tmp)
                 df_comp = pd.concat(frames)
-
                 color_seq = [ACCENT, BLUE_LIGHT, ACCENT3, ACCENT2]
                 fig = px.bar(df_comp, x=agrup_col, y=metrica_kpi, color='Período',
                              barmode='group', text=metrica_kpi,
@@ -686,15 +723,12 @@ if app_mode == "🏥  Oferta de Turnos":
                 apply_plotly_defaults(fig, f"Comparativa · {metrica_kpi.replace('_',' ').title()} por {agrup_col.title()}")
                 fig.update_layout(height=480, xaxis_tickangle=-50)
                 st.plotly_chart(fig, use_container_width=True)
-
             with tab_var:
-                # Tabla de variación entre primer y último período
                 g_base   = df_f[df_f['PERIODO']==sorted_meses[0]].groupby(agrup_col)[metrica_kpi].sum()
                 g_actual = df_f[df_f['PERIODO']==sorted_meses[-1]].groupby(agrup_col)[metrica_kpi].sum()
                 df_var   = pd.DataFrame({fmt_fecha(sorted_meses[0]): g_base, fmt_fecha(sorted_meses[-1]): g_actual}).fillna(0)
                 df_var['Diferencia'] = df_var.iloc[:,1] - df_var.iloc[:,0]
                 df_var['Var %']      = (df_var['Diferencia'] / df_var.iloc[:,0] * 100).replace([float('inf'),float('-inf')], 0)
-
                 fig_var = px.bar(
                     df_var.reset_index().sort_values('Diferencia'),
                     x='Diferencia', y=agrup_col, orientation='h',
@@ -708,7 +742,6 @@ if app_mode == "🏥  Oferta de Turnos":
                 apply_plotly_defaults(fig_var, f"Variación absoluta: {fmt_fecha(sorted_meses[0])} → {fmt_fecha(sorted_meses[-1])}")
                 fig_var.update_layout(height=max(400, len(df_var)*22))
                 st.plotly_chart(fig_var, use_container_width=True)
-
             with tab_tabla:
                 st.dataframe(
                     df_var.style.format("{:,.0f}", subset=[fmt_fecha(sorted_meses[0]), fmt_fecha(sorted_meses[-1]), 'Diferencia'])
@@ -722,18 +755,14 @@ if app_mode == "🏥  Oferta de Turnos":
                     nombre_archivo=f"comparativa_{fmt_fecha(sorted_meses[0]).replace(' ','_')}_vs_{fmt_fecha(sorted_meses[-1]).replace(' ','_')}",
                     titulo_pdf=f"Comparativa de Turnos — {nombres}"
                 )
-
     except Exception as e:
         st.error(f"❌ Error en Oferta de Turnos: {e}")
         st.exception(e)
-
-
 # ============================================================
 # APP 2: CALL CENTER
 # ============================================================
 elif app_mode == "🎧  Call Center":
-
-    @st.cache_data(ttl=300)
+    @st.cache_data(ttl=3600)  # FIX PERFORMANCE
     def cargar_datos_cc():
         url = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTOxpr7RRNTLGO96pUK8HJ0iy2ZHeqNpiR7OelleljCVoWPuJCO26q5z66VisWB76khl7Tmsqh5CqNC/pub?gid=0&single=true&output=csv"
         df = pd.read_csv(url, dtype=str).fillna("0")
@@ -744,19 +773,14 @@ elif app_mode == "🎧  Call Center":
             if c in df.columns:
                 df[c] = pd.to_numeric(df[c].str.replace('.','',regex=False), errors='coerce').fillna(0)
         return df
-
-    @st.cache_data(ttl=300)
+    @st.cache_data(ttl=3600)  # FIX PERFORMANCE
     def cargar_datos_redes():
-        # BD_REDES está en el mismo archivo que BD_CALLCENTER
-        # Reemplazar REDES_GID con el gid real de la pestaña BD_REDES
         url = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTOxpr7RRNTLGO96pUK8HJ0iy2ZHeqNpiR7OelleljCVoWPuJCO26q5z66VisWB76khl7Tmsqh5CqNC/pub?gid=734059738&single=true&output=csv"
         try:
             df = pd.read_csv(url, dtype=str).fillna('')
         except Exception as e:
             return pd.DataFrame(), str(e)
         df.columns = df.columns.str.strip().str.replace('\n', ' ', regex=False)
-
-        # Renombrar columnas del archivo al nombre estándar del código
         rename_map = {
             'MES'                      : 'MES',
             'INGRESADOS REDES'         : 'INGRESADOS_REDES',
@@ -767,19 +791,16 @@ elif app_mode == "🎧  Call Center":
             'TOTAL TURNOS'             : 'TURNOS_TOTAL_REDES',
         }
         df = df.rename(columns=rename_map)
-
         def parsear_fecha_redes(txt):
             if not txt or str(txt).strip() in ['', 'nan']: return None
             t = str(txt).lower().strip().replace(".", "")
             m_map = {'ene':1,'feb':2,'mar':3,'abr':4,'may':5,'jun':6,
                      'jul':7,'ago':8,'sep':9,'oct':10,'nov':11,'dic':12,
                      'jan':1,'apr':4,'aug':8,'dec':12}
-            # Try standard datetime first
             try:
                 ts = pd.to_datetime(t, dayfirst=True)
                 if ts.year > 2000: return ts.replace(day=1)
             except: pass
-            # Try "mes-año" format
             for sep in ['-', ' ']:
                 p = t.replace(sep, ' ').split()
                 if len(p) >= 2:
@@ -788,10 +809,8 @@ elif app_mode == "🎧  Call Center":
                     if mes and yr.isdigit():
                         return pd.Timestamp(year=int(yr), month=mes, day=1)
             return None
-
         df['FECHA_REAL'] = df['MES'].apply(parsear_fecha_redes)
         df = df.dropna(subset=['FECHA_REAL']).sort_values('FECHA_REAL')
-
         cols_num = ['INGRESADOS_REDES','ATENDIDOS_REDES','NO_ATENDIDOS_REDES',
                     'TURNOS_PRACT_REDES','TURNOS_CONS_REDES','TURNOS_TOTAL_REDES']
         for c in cols_num:
@@ -801,7 +820,6 @@ elif app_mode == "🎧  Call Center":
                                      .str.replace(',','',regex=False),
                     errors='coerce').fillna(0)
         return df, None
-
     def parsear_fecha(txt):
         if pd.isna(txt): return None
         t = str(txt).lower().strip().replace(".", "")
@@ -813,26 +831,21 @@ elif app_mode == "🎧  Call Center":
         mes = m_map.get(p[0][:3])
         yr  = p[1] if len(p[1])==4 else "20"+p[1]
         return pd.Timestamp(year=int(yr), month=mes, day=1) if mes else None
-
     def tmo_a_segundos(txt):
-        """Convierte '0:03:45' o '3:45' a segundos."""
         if not txt or str(txt).strip() in ['','nan','0']: return None
         try:
             partes = str(txt).strip().split(':')
-            if len(partes) == 3:   # H:MM:SS
+            if len(partes) == 3:
                 return int(partes[0])*3600 + int(partes[1])*60 + int(partes[2])
-            elif len(partes) == 2: # MM:SS
+            elif len(partes) == 2:
                 return int(partes[0])*60 + int(partes[1])
         except: pass
         return None
-
     def seg_a_mmss(seg):
-        """Convierte segundos a string 'Xm Ys'."""
         if seg is None or np.isnan(seg): return "—"
         seg = int(seg)
         return f"{seg//60}m {seg%60:02d}s"
-
-    @st.cache_data(ttl=300)
+    @st.cache_data(ttl=3600)  # FIX PERFORMANCE
     def cargar_operadores_tel():
         url = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTOxpr7RRNTLGO96pUK8HJ0iy2ZHeqNpiR7OelleljCVoWPuJCO26q5z66VisWB76khl7Tmsqh5CqNC/pub?gid=894931362&single=true&output=csv"
         try:
@@ -850,8 +863,7 @@ elif app_mode == "🎧  Call Center":
             return df, None
         except Exception as e:
             return pd.DataFrame(), str(e)
-
-    @st.cache_data(ttl=300)
+    @st.cache_data(ttl=3600)  # FIX PERFORMANCE
     def cargar_operadores_redes():
         url = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTOxpr7RRNTLGO96pUK8HJ0iy2ZHeqNpiR7OelleljCVoWPuJCO26q5z66VisWB76khl7Tmsqh5CqNC/pub?gid=2101265013&single=true&output=csv"
         try:
@@ -869,10 +881,7 @@ elif app_mode == "🎧  Call Center":
             return df, None
         except Exception as e:
             return pd.DataFrame(), str(e)
-
-    # Corte de sistema: antes de Jul-2024 los turnos estaban unificados
     CORTE_SISTEMAS = pd.Timestamp('2024-07-01')
-
     try:
         df_tel   = cargar_datos_cc()
         df_tel['FECHA_REAL'] = df_tel['MES'].apply(parsear_fecha)
@@ -881,7 +890,6 @@ elif app_mode == "🎧  Call Center":
         df_tel['TOTAL_ATENDIDAS'] = df_tel['ATENDIDAS_FIN']  + df_tel['ATENDIDAS_PREPAGO']
         df_tel['TOTAL_PERDIDAS']  = df_tel['PERDIDAS_FIN']   + df_tel['PERDIDAS_PREPAGO']
         df_tel['SLA']             = (df_tel['TOTAL_ATENDIDAS'] / df_tel['TOTAL_LLAMADAS'] * 100).fillna(0)
-
         df_red, redes_error = cargar_datos_redes()
         if redes_error:
             st.warning(f"⚠️ No se pudo cargar BD_REDES: {redes_error}")
@@ -890,10 +898,8 @@ elif app_mode == "🎧  Call Center":
         elif not df_red.empty:
             st.warning(f"⚠️ BD_REDES columnas inesperadas: {list(df_red.columns)}")
             df_red = pd.DataFrame()
-
         df_op_tel, op_tel_err   = cargar_operadores_tel()
         df_op_red, op_red_err   = cargar_operadores_redes()
-
         with st.sidebar:
             st.markdown(f"<div style='font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:{TEXT_MUTED};margin-bottom:8px;'>VISTA</div>", unsafe_allow_html=True)
             modo = st.radio("", ["📅  Mensual", "📱  Redes Sociales", "👥  Operadores", "🔄  Interanual"],
@@ -902,22 +908,18 @@ elif app_mode == "🎧  Call Center":
             if "Mensual" in modo:
                 segmento = st.selectbox("SEGMENTO TELÉFONO",
                                         ["Unificado","Solo Financiadores","Solo Prepago"])
-
         st.markdown('<div class="section-header"><span class="section-title">🎧 Call Center</span></div>',
                     unsafe_allow_html=True)
-
         # ══════════════════════════════════════════════════════
-        # VISTA MENSUAL — Teléfono + resumen combinado
+        # VISTA MENSUAL
         # ══════════════════════════════════════════════════════
         if "Mensual" in modo:
             fechas = sorted(df_tel['FECHA_REAL'].unique(), reverse=True)
             sel    = st.selectbox("Período", fechas,
                                   format_func=lambda x: f"{MESES_FULL[x.month]} {x.year}")
-
             d     = df_tel[df_tel['FECHA_REAL'] == sel].iloc[0]
             d_ant = df_tel[df_tel['FECHA_REAL'] < sel].sort_values('FECHA_REAL').iloc[-1] \
                     if len(df_tel[df_tel['FECHA_REAL'] < sel]) > 0 else None
-
             if segmento == "Solo Financiadores":
                 rec, aten, perd = d['RECIBIDAS_FIN'], d['ATENDIDAS_FIN'], d['PERDIDAS_FIN']
                 rec_a, aten_a, perd_a = (d_ant['RECIBIDAS_FIN'], d_ant['ATENDIDAS_FIN'],
@@ -930,14 +932,10 @@ elif app_mode == "🎧  Call Center":
                 rec, aten, perd = d['TOTAL_LLAMADAS'], d['TOTAL_ATENDIDAS'], d['TOTAL_PERDIDAS']
                 rec_a, aten_a, perd_a = (d_ant['TOTAL_LLAMADAS'], d_ant['TOTAL_ATENDIDAS'],
                                           d_ant['TOTAL_PERDIDAS']) if d_ant is not None else (0,0,0)
-
             sla = (aten / rec * 100) if rec > 0 else 0
-
             st.markdown(f'<div class="section-subtitle">📞 Teléfono · <span class="badge">{MESES_FULL[sel.month]} {sel.year}</span></div>',
                         unsafe_allow_html=True)
-
             def delta_or_none(v, va): return (v-va, (v-va)/va*100) if va > 0 else (None, None)
-
             c1,c2,c3,c4 = st.columns(4)
             d1, p1 = delta_or_none(rec, rec_a)
             d2, p2 = delta_or_none(aten, aten_a)
@@ -948,10 +946,8 @@ elif app_mode == "🎧  Call Center":
             c4.markdown(kpi_card("Nivel de Servicio", sla, suffix="%"), unsafe_allow_html=True)
             if sla < 90:
                 c4.error(f"⚠️ Bajo meta — {sla:.1f}% < 90%")
-
             st.markdown("<br>", unsafe_allow_html=True)
             col1, col2 = st.columns(2)
-
             with col1:
                 fig_pie = go.Figure(go.Pie(
                     labels=['Atendidas','Abandonadas'], values=[aten, perd], hole=0.55,
@@ -964,7 +960,6 @@ elif app_mode == "🎧  Call Center":
                                        font=dict(size=18, color="#CDD6F4"))
                 apply_plotly_defaults(fig_pie, "Nivel de atención — Teléfono")
                 st.plotly_chart(fig_pie, use_container_width=True)
-
             with col2:
                 turnos_data = {'Concepto': ['Consultorios','Prácticas','Total'],
                                'Cantidad': [d['TURNOS_CONS_TEL'], d['TURNOS_PRACT_TEL'], d['TURNOS_TOTAL_TEL']]}
@@ -977,37 +972,31 @@ elif app_mode == "🎧  Call Center":
                 fig_t.update_layout(showlegend=False)
                 apply_plotly_defaults(fig_t, "Turnos gestionados por teléfono")
                 st.plotly_chart(fig_t, use_container_width=True)
-
-            # ── Resumen combinado Teléfono + Redes ──────────
-            dr_sel = df_red[df_red['FECHA_REAL'] == sel]
+            # Resumen combinado
+            dr_sel = df_red[df_red['FECHA_REAL'] == sel] if not df_red.empty else pd.DataFrame()
             if not dr_sel.empty:
                 dr = dr_sel.iloc[0]
                 st.markdown("<hr>", unsafe_allow_html=True)
                 st.markdown(f'<div class="section-subtitle">📊 Resumen combinado · Teléfono + Redes · <span class="badge">{MESES_FULL[sel.month]} {sel.year}</span></div>',
                             unsafe_allow_html=True)
-
                 total_ing  = rec + dr['INGRESADOS_REDES']
                 total_aten = aten + dr['ATENDIDOS_REDES']
                 total_no   = perd + dr['NO_ATENDIDOS_REDES']
                 sla_comb   = (total_aten / total_ing * 100) if total_ing > 0 else 0
-
-                # Advertencia si cruzamos el corte de sistemas
                 if sel < CORTE_SISTEMAS:
                     st.markdown(f"""
-                    <div class="insight-box insight-box-amber">
+                    <div style="background:rgba(255,183,77,0.1);border:1px solid rgba(255,183,77,0.3);
+                                border-radius:8px;padding:8px 10px;font-size:12px;color:{ACCENT3};margin-bottom:8px;">
                         ⚠️ <b>Nota metodológica:</b> Antes de Julio 2024 los canales estaban en un
                         sistema unificado. El comparativo combinado pre Jul-2024 puede no reflejar
                         la separación real entre teléfono y redes.
                     </div>
                     """, unsafe_allow_html=True)
-
                 cb1, cb2, cb3, cb4 = st.columns(4)
                 cb1.markdown(kpi_card("📞+📱 Total Contactos", total_ing), unsafe_allow_html=True)
                 cb2.markdown(kpi_card("✅ Total Atendidos", total_aten), unsafe_allow_html=True)
                 cb3.markdown(kpi_card("❌ Total No Atendidos", total_no), unsafe_allow_html=True)
                 cb4.markdown(kpi_card("📊 SLA Combinado", sla_comb, suffix="%"), unsafe_allow_html=True)
-
-                # Barras comparativas teléfono vs redes
                 st.markdown("<br>", unsafe_allow_html=True)
                 df_comp_bar = pd.DataFrame({
                     'Canal'    : ['Teléfono','Teléfono','Redes','Redes'],
@@ -1022,8 +1011,6 @@ elif app_mode == "🎧  Call Center":
                 apply_plotly_defaults(fig_comp, "Contactos por canal — comparativa")
                 fig_comp.update_layout(height=320)
                 st.plotly_chart(fig_comp, use_container_width=True)
-
-                # Turnos combinados (solo desde Jul-2024)
                 if sel >= CORTE_SISTEMAS:
                     st.markdown("<br>", unsafe_allow_html=True)
                     turnos_comb = pd.DataFrame({
@@ -1041,8 +1028,7 @@ elif app_mode == "🎧  Call Center":
                     apply_plotly_defaults(fig_tc, "Turnos por canal")
                     fig_tc.update_layout(height=320)
                     st.plotly_chart(fig_tc, use_container_width=True)
-
-            # ── Evolución histórica ───────────────────────────
+            # Evolución histórica
             st.markdown("<hr>", unsafe_allow_html=True)
             fig_evo = go.Figure()
             fig_evo.add_trace(go.Scatter(x=df_tel['FECHA_REAL'], y=df_tel['TOTAL_LLAMADAS'],
@@ -1066,7 +1052,6 @@ elif app_mode == "🎧  Call Center":
             apply_plotly_defaults(fig_evo, "Evolución histórica de contactos — Teléfono y Redes")
             fig_evo.update_layout(height=300)
             st.plotly_chart(fig_evo, use_container_width=True)
-
         # ══════════════════════════════════════════════════════
         # VISTA REDES SOCIALES
         # ══════════════════════════════════════════════════════
@@ -1074,38 +1059,31 @@ elif app_mode == "🎧  Call Center":
             if df_red.empty:
                 st.warning("No hay datos de redes cargados.")
                 st.stop()
-
             fechas_r = sorted(df_red['FECHA_REAL'].unique(), reverse=True)
             sel_r    = st.selectbox("Período", fechas_r,
                                     format_func=lambda x: f"{MESES_FULL[x.month]} {x.year}")
-
             dr     = df_red[df_red['FECHA_REAL'] == sel_r].iloc[0]
             dr_ant = df_red[df_red['FECHA_REAL'] < sel_r].sort_values('FECHA_REAL').iloc[-1] \
                      if len(df_red[df_red['FECHA_REAL'] < sel_r]) > 0 else None
-
             ing  = dr['INGRESADOS_REDES']
             aten = dr['ATENDIDOS_REDES']
             no_a = dr['NO_ATENDIDOS_REDES']
             sla_r = (aten / ing * 100) if ing > 0 else 0
-
             ing_a  = dr_ant['INGRESADOS_REDES']  if dr_ant is not None else 0
             aten_a = dr_ant['ATENDIDOS_REDES']   if dr_ant is not None else 0
             no_a_a = dr_ant['NO_ATENDIDOS_REDES'] if dr_ant is not None else 0
-
             st.markdown(f'<div class="section-subtitle">📱 Redes Sociales · <span class="badge">{MESES_FULL[sel_r.month]} {sel_r.year}</span></div>',
                         unsafe_allow_html=True)
-
             if sel_r < CORTE_SISTEMAS:
                 st.markdown(f"""
-                <div class="insight-box insight-box-amber">
+                <div style="background:rgba(255,183,77,0.1);border:1px solid rgba(255,183,77,0.3);
+                            border-radius:8px;padding:8px 10px;font-size:12px;color:{ACCENT3};margin-bottom:8px;">
                     ⚠️ <b>Nota metodológica:</b> Antes de Julio 2024 los turnos de redes y teléfono
                     estaban en un sistema unificado. Los datos de turnos por canal no están disponibles
                     para este período.
                 </div>
                 """, unsafe_allow_html=True)
-
             def dn(v, va): return (v-va, (v-va)/va*100) if va > 0 else (None, None)
-
             c1,c2,c3,c4 = st.columns(4)
             d1,p1 = dn(ing, ing_a)
             d2,p2 = dn(aten, aten_a)
@@ -1116,10 +1094,8 @@ elif app_mode == "🎧  Call Center":
             c4.markdown(kpi_card("📊 Nivel de Atención", sla_r, suffix="%"), unsafe_allow_html=True)
             if sla_r < 90:
                 c4.error(f"⚠️ Bajo meta — {sla_r:.1f}% < 90%")
-
             st.markdown("<br>", unsafe_allow_html=True)
             col1, col2 = st.columns(2)
-
             with col1:
                 fig_pie = go.Figure(go.Pie(
                     labels=['Atendidos','No Atendidos'], values=[aten, no_a], hole=0.55,
@@ -1132,7 +1108,6 @@ elif app_mode == "🎧  Call Center":
                                        font=dict(size=18, color="#CDD6F4"))
                 apply_plotly_defaults(fig_pie, "Nivel de atención — Redes")
                 st.plotly_chart(fig_pie, use_container_width=True)
-
             with col2:
                 if sel_r >= CORTE_SISTEMAS:
                     t_pract = dr['TURNOS_PRACT_REDES']
@@ -1151,8 +1126,6 @@ elif app_mode == "🎧  Call Center":
                     st.plotly_chart(fig_tr, use_container_width=True)
                 else:
                     st.info("Datos de turnos por canal disponibles desde Julio 2024.")
-
-            # Evolución histórica redes
             st.markdown("<hr>", unsafe_allow_html=True)
             fig_evo_r = go.Figure()
             fig_evo_r.add_trace(go.Scatter(x=df_red['FECHA_REAL'], y=df_red['INGRESADOS_REDES'],
@@ -1170,8 +1143,6 @@ elif app_mode == "🎧  Call Center":
             apply_plotly_defaults(fig_evo_r, "Evolución histórica — Redes Sociales")
             fig_evo_r.update_layout(height=300)
             st.plotly_chart(fig_evo_r, use_container_width=True)
-
-            # Evolución de turnos por redes (solo desde Jul-2024)
             df_red_post = df_red[df_red['FECHA_REAL'] >= CORTE_SISTEMAS]
             if not df_red_post.empty and 'TURNOS_TOTAL_REDES' in df_red_post.columns:
                 st.markdown("<hr>", unsafe_allow_html=True)
@@ -1188,7 +1159,6 @@ elif app_mode == "🎧  Call Center":
                 apply_plotly_defaults(fig_trn, "Evolución de turnos gestionados por redes (desde Jul-2024)")
                 fig_trn.update_layout(height=280)
                 st.plotly_chart(fig_trn, use_container_width=True)
-
             with st.expander("Ver datos históricos de redes"):
                 st.dataframe(df_red[['FECHA_REAL','INGRESADOS_REDES','ATENDIDOS_REDES',
                                      'NO_ATENDIDOS_REDES','TURNOS_PRACT_REDES',
@@ -1198,24 +1168,18 @@ elif app_mode == "🎧  Call Center":
                                             'TURNOS_CONS_REDES':'{:,.0f}','TURNOS_TOTAL_REDES':'{:,.0f}',
                                             'SLA_REDES':'{:.1f}%'}),
                              use_container_width=True)
-
         # ══════════════════════════════════════════════════════
         # VISTA OPERADORES
         # ══════════════════════════════════════════════════════
         elif "Operadores" in modo:
             st.markdown('<div class="section-subtitle">Dotación, productividad y TMO por canal</div>',
                         unsafe_allow_html=True)
-
             tiene_op_tel = not df_op_tel.empty
             tiene_op_red = not df_op_red.empty
-
             if not tiene_op_tel and not tiene_op_red:
                 st.warning("No hay datos de operadores disponibles.")
                 st.stop()
-
             tab_tel, tab_red = st.tabs(["📞 Teléfono", "📱 Redes Sociales"])
-
-            # ── TELÉFONO ─────────────────────────────────────
             with tab_tel:
                 if not tiene_op_tel:
                     st.info("Sin datos de operadores de teléfono.")
@@ -1228,23 +1192,17 @@ elif app_mode == "🎧  Call Center":
                     ult = df_op_tel.loc[idx_op_tel]
                     ant_df = df_op_tel[df_op_tel['FECHA_REAL'] < sel_op_tel]
                     ant = ant_df.iloc[-1] if not ant_df.empty else None
-
                     prod_actual = ult['PROD_TEL']
                     prod_ant    = ant['PROD_TEL'] if ant is not None else None
                     d_prod = (prod_actual - prod_ant) if prod_ant else None
                     p_prod = (d_prod / prod_ant * 100) if prod_ant else None
-
                     op_actual = ult['OPERADORES']
                     op_ant    = ant['OPERADORES'] if ant is not None else None
                     d_op = (op_actual - op_ant) if op_ant is not None else None
-
                     tmo_actual = ult['TMO_SEG']
-                    tmo_ant    = ant['TMO_SEG'] if ant is not None else None
-
                     label_per = f"{MESES_FULL[sel_op_tel.month]} {sel_op_tel.year}"
                     st.markdown(f'<div class="section-subtitle">Último período · <span class="badge">{label_per}</span></div>',
                                 unsafe_allow_html=True)
-
                     c1, c2, c3, c4 = st.columns(4)
                     c1.markdown(kpi_card("👥 Operadores Activos", op_actual,
                                          delta=d_op if d_op else None,
@@ -1261,10 +1219,7 @@ elif app_mode == "🎧  Call Center":
                     </div>
                     """, unsafe_allow_html=True)
                     c4.markdown(kpi_card("📊 Llamadas Atendidas", int(ult['LLAMADAS_ATENDIDAS'])), unsafe_allow_html=True)
-
                     st.markdown("<br>", unsafe_allow_html=True)
-
-                    # Gráfico 1: Dotación + Productividad
                     fig_op = go.Figure()
                     fig_op.add_trace(go.Bar(
                         x=df_op_tel['FECHA_REAL'], y=df_op_tel['OPERADORES'],
@@ -1282,8 +1237,6 @@ elif app_mode == "🎧  Call Center":
                         yaxis2=dict(overlaying='y', side='right', showgrid=False,
                                     title='Llamadas/Op', color=ACCENT))
                     st.plotly_chart(fig_op, use_container_width=True)
-
-                    # Gráfico 2: TMO (solo donde hay dato)
                     df_tmo = df_op_tel[df_op_tel['TMO_SEG'].notna()].copy()
                     if not df_tmo.empty:
                         st.markdown("<hr>", unsafe_allow_html=True)
@@ -1304,8 +1257,6 @@ elif app_mode == "🎧  Call Center":
                                        ticktext=[seg_a_mmss(s) for s in range(0, int(df_tmo['TMO_SEG'].max())+60, 30)]))
                         st.caption("⚠️ TMO disponible desde Enero 2025")
                         st.plotly_chart(fig_tmo, use_container_width=True)
-
-            # ── REDES ─────────────────────────────────────────
             with tab_red:
                 if not tiene_op_red:
                     st.info("Sin datos de operadores de redes.")
@@ -1318,7 +1269,6 @@ elif app_mode == "🎧  Call Center":
                     ult_r = df_op_red.loc[idx_op_red]
                     ant_r_df = df_op_red[df_op_red['FECHA_REAL'] < sel_op_red]
                     ant_r = ant_r_df.iloc[-1] if not ant_r_df.empty else None
-
                     prod_r  = ult_r['PROD_RED']
                     prod_ra = ant_r['PROD_RED'] if ant_r is not None else None
                     d_pr    = (prod_r - prod_ra) if prod_ra else None
@@ -1326,11 +1276,9 @@ elif app_mode == "🎧  Call Center":
                     op_r    = ult_r['OPERADORES']
                     op_ra   = ant_r['OPERADORES'] if ant_r is not None else None
                     d_opr   = (op_r - op_ra) if op_ra is not None else None
-
                     label_per_r = f"{MESES_FULL[sel_op_red.month]} {sel_op_red.year}"
                     st.markdown(f'<div class="section-subtitle">Último período · <span class="badge">{label_per_r}</span></div>',
                                 unsafe_allow_html=True)
-
                     c1, c2, c3, c4 = st.columns(4)
                     c1.markdown(kpi_card("👥 Operadores Activos", op_r,
                                          delta=d_opr if d_opr else None,
@@ -1347,9 +1295,7 @@ elif app_mode == "🎧  Call Center":
                     </div>
                     """, unsafe_allow_html=True)
                     c4.markdown(kpi_card("📊 Casos Respondidos", int(ult_r['CASOS_RESPONDIDOS'])), unsafe_allow_html=True)
-
                     st.markdown("<br>", unsafe_allow_html=True)
-
                     fig_op_r = go.Figure()
                     fig_op_r.add_trace(go.Bar(
                         x=df_op_red['FECHA_REAL'], y=df_op_red['OPERADORES'],
@@ -1367,7 +1313,6 @@ elif app_mode == "🎧  Call Center":
                         yaxis2=dict(overlaying='y', side='right', showgrid=False,
                                     title='Casos/Op', color=ACCENT))
                     st.plotly_chart(fig_op_r, use_container_width=True)
-
                     df_tmo_r = df_op_red[df_op_red['TMO_SEG'].notna()].copy()
                     if not df_tmo_r.empty:
                         st.markdown("<hr>", unsafe_allow_html=True)
@@ -1388,8 +1333,6 @@ elif app_mode == "🎧  Call Center":
                                        ticktext=[seg_a_mmss(s) for s in range(0, int(df_tmo_r['TMO_SEG'].max())+60, 30)]))
                         st.caption("⚠️ TMO de redes disponible desde Enero 2025")
                         st.plotly_chart(fig_tmo_r, use_container_width=True)
-
-            # Comparativa dotación teléfono vs redes
             if tiene_op_tel and tiene_op_red:
                 st.markdown("<hr>", unsafe_allow_html=True)
                 st.markdown('<div class="sec-title" style="font-size:16px;">📊 Comparativa dotación — Teléfono vs Redes</div>',
@@ -1406,25 +1349,21 @@ elif app_mode == "🎧  Call Center":
                 apply_plotly_defaults(fig_dot, "Evolución de dotación por canal")
                 fig_dot.update_layout(height=280)
                 st.plotly_chart(fig_dot, use_container_width=True)
-
         # ══════════════════════════════════════════════════════
         # VISTA INTERANUAL
         # ══════════════════════════════════════════════════════
         else:
             st.markdown(f'<div class="section-subtitle">Mismo mes en distintos años</div>',
                         unsafe_allow_html=True)
-
             canal_int = st.radio("Canal:", ["📞 Teléfono","📱 Redes","📊 Combinado"], horizontal=True)
             mes_nom   = st.selectbox("Mes a comparar", list(MESES_FULL.values()))
             m_num     = list(MESES_FULL.values()).index(mes_nom) + 1
-
             if "Teléfono" in canal_int:
                 df_i = df_tel[df_tel['FECHA_REAL'].dt.month == m_num].copy()
                 if df_i.empty:
                     st.warning("Sin datos históricos para este mes.")
                 else:
                     df_i['AÑO'] = df_i['FECHA_REAL'].dt.year.astype(str)
-                    # Recalcular SLA para asegurar que todos los años tienen el dato
                     df_i['SLA'] = (df_i['TOTAL_ATENDIDAS'] / df_i['TOTAL_LLAMADAS'] * 100).fillna(0)
                     fig = go.Figure()
                     fig.add_trace(go.Bar(x=df_i['AÑO'], y=df_i['TOTAL_ATENDIDAS'],
@@ -1444,7 +1383,6 @@ elif app_mode == "🎧  Call Center":
                                     title='SLA %', color=ACCENT3,
                                     range=[0, 110]))
                     st.plotly_chart(fig, use_container_width=True)
-
             elif "Redes" in canal_int:
                 df_i = df_red[df_red['FECHA_REAL'].dt.month == m_num].copy()
                 if df_i.empty:
@@ -1470,36 +1408,30 @@ elif app_mode == "🎧  Call Center":
                                     title='Atención %', color=ACCENT,
                                     range=[0, 110]))
                     st.plotly_chart(fig, use_container_width=True)
-
-            else:  # Combinado
+            else:
                 df_it = df_tel[df_tel['FECHA_REAL'].dt.month == m_num].copy()
                 df_ir = df_red[df_red['FECHA_REAL'].dt.month == m_num].copy()
-
                 if df_it.empty and df_ir.empty:
                     st.warning("Sin datos para este mes.")
                 else:
                     df_it['AÑO'] = df_it['FECHA_REAL'].dt.year.astype(str)
                     df_ir['AÑO'] = df_ir['FECHA_REAL'].dt.year.astype(str)
-
-                    # Mostrar solo años donde AMBOS canales tienen dato
                     años_tel = set(df_it['AÑO'])
                     años_red = set(df_ir['AÑO'])
                     años_comunes = años_tel & años_red
-
                     if not años_comunes:
                         st.info("No hay años con datos simultáneos en ambos canales para este mes.")
                     else:
                         df_it_f = df_it[df_it['AÑO'].isin(años_comunes)]
                         df_ir_f = df_ir[df_ir['AÑO'].isin(años_comunes)]
-
                         if pd.Timestamp(f"{min(int(a) for a in años_comunes)}-{m_num:02d}-01") < CORTE_SISTEMAS:
                             st.markdown(f"""
-                            <div class="insight-box insight-box-amber">
+                            <div style="background:rgba(255,183,77,0.1);border:1px solid rgba(255,183,77,0.3);
+                                        border-radius:8px;padding:8px 10px;font-size:12px;color:{ACCENT3};margin-bottom:8px;">
                                 ⚠️ Antes de Julio 2024 los canales estaban unificados — la comparativa
                                 interanual puede no ser homogénea para años anteriores a 2024.
                             </div>
                             """, unsafe_allow_html=True)
-
                         fig = go.Figure()
                         fig.add_trace(go.Bar(x=df_it_f['AÑO'], y=df_it_f['TOTAL_ATENDIDAS'],
                             name='Atendidas Tel', marker_color=ACCENT,
@@ -1510,30 +1442,22 @@ elif app_mode == "🎧  Call Center":
                         apply_plotly_defaults(fig, f"Combinado — {mes_nom} · comparativa interanual")
                         fig.update_layout(barmode='group', height=400)
                         st.plotly_chart(fig, use_container_width=True)
-
     except Exception as e:
         st.error(f"❌ Error en Call Center: {e}")
         st.exception(e)
-
-
-
 # ============================================================
 # APP 3: AUSENTISMO
 # ============================================================
 elif app_mode == "📉  Ausentismo":
-
-    @st.cache_data(ttl=300)
+    @st.cache_data(ttl=3600)  # FIX PERFORMANCE
     def cargar_ausencias():
         url = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQHFwl-Dxn-Rw9KN_evkCMk2Er8lQqgZMzAtN4LuEkWcCeBVUNwgb8xeIFKvpyxMgeGTeJ3oEWKpMZj/pub?gid=2132722842&single=true&output=csv"
         df = pd.read_csv(url)
         df.columns = df.columns.str.strip()
         df['FECHA_INICIO'] = pd.to_datetime(df['FECHA_INICIO'], dayfirst=True, errors='coerce')
         return df
-
     try:
         df_aus = cargar_ausencias()
-
-        # Detectar columna de métrica principal
         if 'CONSULTORIOS_REALES' in df_aus.columns:
             col_target = 'CONSULTORIOS_REALES'
             label_target = "Consultorios Cancelados"
@@ -1543,13 +1467,11 @@ elif app_mode == "📉  Ausentismo":
         else:
             st.error("❌ No se encontró la columna de métrica (CONSULTORIOS_REALES o DIAS_CAIDOS).")
             st.stop()
-
         if df_aus[col_target].dtype == 'object':
             df_aus[col_target] = pd.to_numeric(
                 df_aus[col_target].str.replace('.','',regex=False), errors='coerce').fillna(0)
         else:
             df_aus[col_target] = pd.to_numeric(df_aus[col_target], errors='coerce').fillna(0)
-
         with st.sidebar:
             st.markdown(f"<div style='font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:{TEXT_MUTED};margin-bottom:8px;'>FILTROS</div>", unsafe_allow_html=True)
             años = sorted(df_aus['FECHA_INICIO'].dt.year.dropna().unique())
@@ -1561,9 +1483,7 @@ elif app_mode == "📉  Ausentismo":
                                         default=meses_disp,
                                         format_func=lambda x: MESES_FULL.get(x, x))
             if meses_sel: df_y = df_y[df_y['MES_NUM'].isin(meses_sel)]
-
             st.markdown("<hr>", unsafe_allow_html=True)
-            # Filtro cruzado — leer session_state de Turnos
             cross_srv = st.session_state.get('cross_servicio', [])
             cross_dpt = st.session_state.get('cross_depto', [])
             if cross_srv or cross_dpt:
@@ -1573,11 +1493,9 @@ elif app_mode == "📉  Ausentismo":
                     🔗 <b>Filtro cruzado activo desde Turnos</b>
                 </div>
                 """, unsafe_allow_html=True)
-
             for col in ['DEPARTAMENTO','SERVICIO','MOTIVO','PROFESIONAL']:
                 if col in df_y.columns:
-                    opciones = sorted(df_y[col].astype(str).unique())
-                    # Pre-cargar desde session_state si corresponde
+                    opciones = safe_opts(df_y[col])
                     if col == 'SERVICIO' and cross_srv:
                         default_val = [s for s in cross_srv if s in opciones]
                     elif col == 'DEPARTAMENTO' and cross_dpt:
@@ -1586,36 +1504,25 @@ elif app_mode == "📉  Ausentismo":
                         default_val = []
                     sel = st.multiselect(col, opciones, default=default_val)
                     if sel: df_y = df_y[df_y[col].isin(sel)]
-
         if df_y.empty:
             st.warning("Sin datos para los filtros seleccionados.")
             st.stop()
-
         st.markdown('<div class="section-header"><span class="section-title">📉 Gestión de Ausentismo y Licencias</span></div>', unsafe_allow_html=True)
         meses_badge = " · ".join([MESES_FULL.get(m, str(m)) for m in sorted(meses_sel)])
         st.markdown(f'<div class="section-subtitle">Año {año_sel} · <span class="badge">{meses_badge}</span></div>', unsafe_allow_html=True)
-
-        # KPIs
         total_cancel  = df_y[col_target].sum()
         n_eventos     = len(df_y)
         n_profs       = df_y['PROFESIONAL'].nunique() if 'PROFESIONAL' in df_y.columns else 0
         top_motivo    = df_y['MOTIVO'].mode()[0] if 'MOTIVO' in df_y.columns and not df_y.empty else "-"
-
         c1,c2,c3,c4 = st.columns(4)
         c1.markdown(kpi_card(label_target, total_cancel), unsafe_allow_html=True)
         c2.markdown(kpi_card("Eventos / Licencias", n_eventos), unsafe_allow_html=True)
         c3.markdown(kpi_card("Profesionales", n_profs), unsafe_allow_html=True)
-
-        # Para motivo principal usamos métrica nativa (string, no numérico)
         c4.metric("Motivo Principal", str(top_motivo))
-
         st.markdown("<br>", unsafe_allow_html=True)
-
         col1, col2 = st.columns(2)
-
         with col1:
             if 'MOTIVO' in df_y.columns:
-                # Agrupar motivos menores en "Otros" — solo Top 8 visibles
                 df_mot_full = df_y.groupby('MOTIVO')[col_target].sum().reset_index().sort_values(col_target, ascending=False)
                 TOP_N = 8
                 if len(df_mot_full) > TOP_N:
@@ -1624,7 +1531,6 @@ elif app_mode == "📉  Ausentismo":
                     df_mot   = pd.concat([top8, otros], ignore_index=True)
                 else:
                     df_mot = df_mot_full
-
                 COLOR_SEQ = [ACCENT, BLUE_LIGHT, ACCENT3, ACCENT2, "#B39DDB", "#80DEEA", "#FFCC80", "#F48FB1", "#AAAAAA"]
                 fig_pie = go.Figure(go.Pie(
                     labels=df_mot['MOTIVO'],
@@ -1649,7 +1555,6 @@ elif app_mode == "📉  Ausentismo":
                     height=420,
                 )
                 st.plotly_chart(fig_pie, use_container_width=True)
-
         with col2:
             if 'SERVICIO' in df_y.columns:
                 d_serv = df_y.groupby('SERVICIO')[col_target].sum().reset_index()\
@@ -1663,14 +1568,10 @@ elif app_mode == "📉  Ausentismo":
                 apply_plotly_defaults(fig_hs, "Top 10 servicios afectados")
                 fig_hs.update_layout(height=420)
                 st.plotly_chart(fig_hs, use_container_width=True)
-
-        # Top profesionales — tooltip con desglose de motivos para cada uno
         if 'PROFESIONAL' in df_y.columns:
             st.markdown("<hr>", unsafe_allow_html=True)
             d_prof = df_y.groupby('PROFESIONAL')[col_target].sum().reset_index()\
                          .sort_values(col_target).tail(15)
-
-            # Construir texto de tooltip con desglose de motivos por profesional
             if 'MOTIVO' in df_y.columns:
                 def motivos_tooltip(prof_nombre):
                     sub = df_y[df_y['PROFESIONAL'] == prof_nombre]\
@@ -1678,9 +1579,7 @@ elif app_mode == "📉  Ausentismo":
                               .sort_values(ascending=False)
                     lines = [f"  {m}: {int(v)}" for m, v in sub.items()]
                     return "<br>".join(lines)
-
                 d_prof['tooltip_motivos'] = d_prof['PROFESIONAL'].apply(motivos_tooltip)
-
                 fig_p = go.Figure(go.Bar(
                     x=d_prof[col_target],
                     y=d_prof['PROFESIONAL'],
@@ -1709,19 +1608,15 @@ elif app_mode == "📉  Ausentismo":
                 fig_p.update_traces(texttemplate='%{text:,.0f}', textposition='outside',
                                     marker_line_width=0)
                 fig_p.update_coloraxes(showscale=False)
-
             apply_plotly_defaults(fig_p, "Top 15 profesionales con mayor ausentismo")
             fig_p.update_layout(height=max(420, len(d_prof)*30))
             st.plotly_chart(fig_p, use_container_width=True)
-
-        # Evolución mensual
         st.markdown("<hr>", unsafe_allow_html=True)
         df_y_evo = df_y.copy()
         df_y_evo['MES_LABEL'] = df_y_evo['FECHA_INICIO'].dt.month.map(MESES_FULL)
         df_evo = df_y_evo.groupby('MES_NUM')[col_target].sum().reset_index()
         df_evo['MES_LABEL'] = df_evo['MES_NUM'].map(MESES_FULL)
         df_evo = df_evo.sort_values('MES_NUM')
-
         fig_evo = go.Figure(go.Bar(
             x=df_evo['MES_LABEL'], y=df_evo[col_target],
             text=df_evo[col_target], texttemplate='%{text:,.0f}',
@@ -1732,7 +1627,6 @@ elif app_mode == "📉  Ausentismo":
         apply_plotly_defaults(fig_evo, f"Evolución mensual de {label_target}")
         fig_evo.update_layout(height=280)
         st.plotly_chart(fig_evo, use_container_width=True)
-
         with st.expander("📄 Ver registros detallados"):
             st.dataframe(df_y, use_container_width=True)
             st.markdown("<br>", unsafe_allow_html=True)
@@ -1741,7 +1635,6 @@ elif app_mode == "📉  Ausentismo":
                 nombre_archivo=f"ausentismo_{año_sel}",
                 titulo_pdf=f"Ausentismo y Licencias — {año_sel}"
             )
-
     except Exception as e:
         st.error(f"❌ Error en Ausentismo: {e}")
         st.exception(e)
