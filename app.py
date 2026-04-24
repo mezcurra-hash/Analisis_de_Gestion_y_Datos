@@ -204,7 +204,7 @@ st.markdown(f"""
   }}
   @keyframes pulse-border {{
       0%, 100% {{ box-shadow: 0 0 0 0 rgba(255,107,107,0); }}
-      50%       {{ box-shadow: 0 0 8px 2px rgba(255,107,107,0.25); }}
+      50%      {{ box-shadow: 0 0 8px 2px rgba(255,107,107,0.25); }}
   }}
   .kpi-alert-msg {{
       font-size: 11px;
@@ -316,12 +316,19 @@ def botones_exportacion(df: pd.DataFrame, nombre_archivo: str, titulo_pdf: str):
         col_pdf.caption("PDF: instalar reportlab")
 
 # ============================================================
-# SESSION STATE — Filtro cruzado entre módulos
+# SESSION STATE — Filtro cruzado entre módulos (CORRECCIÓN DOBLE CLICK)
 # ============================================================
 if 'cross_servicio' not in st.session_state:
     st.session_state['cross_servicio'] = []
 if 'cross_depto' not in st.session_state:
     st.session_state['cross_depto'] = []
+
+# Funciones callback para actualizar el estado sin marear a Streamlit
+def update_cross_filtros():
+    if 'ui_serv' in st.session_state:
+        st.session_state['cross_servicio'] = st.session_state['ui_serv']
+    if 'ui_depto' in st.session_state:
+        st.session_state['cross_depto'] = st.session_state['ui_depto']
 
 def apply_plotly_defaults(fig, title=""):
     fig.update_layout(**PLOTLY_LAYOUT)
@@ -368,7 +375,7 @@ st.markdown(f"""
 # ============================================================
 if app_mode == "🏥  Oferta de Turnos":
 
-    @st.cache_data(ttl=300)
+    @st.cache_data(ttl=3600, max_entries=5) # OPTIMIZADO
     def cargar_datos_oferta():
         url = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQHFwl-Dxn-Rw9KN_evkCMk2Er8lQqgZMzAtN4LuEkWcCeBVUNwgb8xeIFKvpyxMgeGTeJ3oEWKpMZj/pub?gid=1524527213&single=true&output=csv"
         df = pd.read_csv(url)
@@ -408,18 +415,26 @@ if app_mode == "🏥  Oferta de Turnos":
 
             with st.expander("🔍  Filtros"):
                 filtro_tipo = st.radio("Modalidad", ["Todos","AP","ANP"], horizontal=True)
-                # ── FIX: usar safe_opts() para evitar el error float vs str en sorted() ──
-                depto = st.multiselect("Departamento", safe_opts(df['DEPARTAMENTO']),
-                                       default=[x for x in st.session_state['cross_depto'] if x in safe_opts(df['DEPARTAMENTO'])])
-                serv  = st.multiselect("Servicio",     safe_opts(df['SERVICIO']),
-                                       default=[x for x in st.session_state['cross_servicio'] if x in safe_opts(df['SERVICIO'])])
-                sede  = st.multiselect("Sede",         safe_opts(df['SEDE']))
+                
+                # ── FIX: Usamos callbacks para evitar el doble click ──
+                opts_depto = safe_opts(df['DEPARTAMENTO'])
+                opts_serv = safe_opts(df['SERVICIO'])
+                
+                depto = st.multiselect("Departamento", opts_depto,
+                                       default=[x for x in st.session_state['cross_depto'] if x in opts_depto],
+                                       key='ui_depto', on_change=update_cross_filtros)
+                
+                serv  = st.multiselect("Servicio", opts_serv,
+                                       default=[x for x in st.session_state['cross_servicio'] if x in opts_serv],
+                                       key='ui_serv', on_change=update_cross_filtros)
+                
+                sede  = st.multiselect("Sede", safe_opts(df['SEDE']))
+                
                 if 'PROFESIONAL/EQUIPO' in df.columns:
                     prof = st.multiselect("Profesional", safe_opts(df['PROFESIONAL/EQUIPO']))
                 else:
                     prof = []
-                st.session_state['cross_servicio'] = serv
-                st.session_state['cross_depto']    = depto
+                
                 if serv or depto:
                     st.caption(f"🔗 Filtro activo · se aplicará en Ausentismo")
 
@@ -464,7 +479,12 @@ if app_mode == "🏥  Oferta de Turnos":
             idx_ant = fechas.index(primer_mes) - 1 if fechas.index(primer_mes) > 0 else None
             df_ant = df[df['PERIODO'] == fechas[idx_ant]] if idx_ant is not None else None
 
-            cols_kpi = st.columns(len(val_sel))
+            # Calculamos n de profesionales para la nueva KPI
+            n_profs = df_f['PROFESIONAL/EQUIPO'].nunique() if 'PROFESIONAL/EQUIPO' in df_f.columns else 0
+
+            # Ajustamos las columnas para incluir a los profesionales
+            cols_kpi = st.columns(len(val_sel) + 1)
+            
             for i, metrica in enumerate(val_sel):
                 val_actual = df_f[metrica].sum()
                 delta = delta_pct = None
@@ -474,9 +494,12 @@ if app_mode == "🏥  Oferta de Turnos":
                     delta_pct = (delta / val_prev * 100) if val_prev > 0 else 0
                 label = metrica.replace("_"," ").title()
                 cols_kpi[i].markdown(kpi_card(label, val_actual, delta, delta_pct), unsafe_allow_html=True)
+            
+            # Nueva Tarjeta
+            cols_kpi[-1].markdown(kpi_card("Profesionales Únicos", n_profs), unsafe_allow_html=True)
 
             st.markdown("<br>", unsafe_allow_html=True)
-            tab_graf, tab_tabla, tab_trend = st.tabs(["📊  Gráfico", "📄  Tabla dinámica", "📈  Tendencia"])
+            tab_graf, tab_tabla, tab_trend, tab_profesionales = st.tabs(["📊  Gráfico", "📄  Tabla dinámica", "📈  Tendencia", "👥  Dotación de Profesionales"])
 
             with tab_graf:
                 agrup_col = filas_sel[0]
@@ -606,6 +629,21 @@ if app_mode == "🏥  Oferta de Turnos":
                         la ANP se agrega al inicio de cada mes.</span>
                     </div>
                     """, unsafe_allow_html=True)
+            
+            with tab_profesionales:
+                if 'PROFESIONAL/EQUIPO' in df_f.columns:
+                    st.markdown("##### Cantidad de Profesionales por Departamento y Servicio")
+                    df_profesionales = df_f.groupby(['DEPARTAMENTO', 'SERVICIO'])['PROFESIONAL/EQUIPO'].nunique().reset_index()
+                    df_profesionales.rename(columns={'PROFESIONAL/EQUIPO': 'CANTIDAD_PROFESIONALES'}, inplace=True)
+                    df_profesionales.sort_values(by=['DEPARTAMENTO', 'CANTIDAD_PROFESIONALES'], ascending=[True, False], inplace=True)
+                    
+                    st.dataframe(
+                        df_profesionales.style.format("{:.0f}", subset=['CANTIDAD_PROFESIONALES']).bar(color=BLUE_LIGHT, subset=['CANTIDAD_PROFESIONALES']),
+                        use_container_width=True,
+                        hide_index=True
+                    )
+                else:
+                    st.info("La columna de Profesionales no está disponible en este dataset.")
 
         # ════════════════════════════════════════════════════
         # VISTA COMPARATIVA
@@ -702,7 +740,7 @@ if app_mode == "🏥  Oferta de Turnos":
 # ============================================================
 elif app_mode == "🎧  Call Center":
 
-    @st.cache_data(ttl=300)
+    @st.cache_data(ttl=3600, max_entries=5) # OPTIMIZADO
     def cargar_datos_cc():
         url = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTOxpr7RRNTLGO96pUK8HJ0iy2ZHeqNpiR7OelleljCVoWPuJCO26q5z66VisWB76khl7Tmsqh5CqNC/pub?gid=0&single=true&output=csv"
         df = pd.read_csv(url, dtype=str).fillna("0")
@@ -714,7 +752,7 @@ elif app_mode == "🎧  Call Center":
                 df[c] = pd.to_numeric(df[c].str.replace('.','',regex=False), errors='coerce').fillna(0)
         return df
 
-    @st.cache_data(ttl=300)
+    @st.cache_data(ttl=3600, max_entries=5) # OPTIMIZADO
     def cargar_datos_redes():
         url = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTOxpr7RRNTLGO96pUK8HJ0iy2ZHeqNpiR7OelleljCVoWPuJCO26q5z66VisWB76khl7Tmsqh5CqNC/pub?gid=734059738&single=true&output=csv"
         try:
@@ -794,7 +832,7 @@ elif app_mode == "🎧  Call Center":
         seg = int(seg)
         return f"{seg//60}m {seg%60:02d}s"
 
-    @st.cache_data(ttl=300)
+    @st.cache_data(ttl=3600, max_entries=5) # OPTIMIZADO
     def cargar_operadores_tel():
         url = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTOxpr7RRNTLGO96pUK8HJ0iy2ZHeqNpiR7OelleljCVoWPuJCO26q5z66VisWB76khl7Tmsqh5CqNC/pub?gid=894931362&single=true&output=csv"
         try:
@@ -813,7 +851,7 @@ elif app_mode == "🎧  Call Center":
         except Exception as e:
             return pd.DataFrame(), str(e)
 
-    @st.cache_data(ttl=300)
+    @st.cache_data(ttl=3600, max_entries=5) # OPTIMIZADO
     def cargar_operadores_redes():
         url = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTOxpr7RRNTLGO96pUK8HJ0iy2ZHeqNpiR7OelleljCVoWPuJCO26q5z66VisWB76khl7Tmsqh5CqNC/pub?gid=2101265013&single=true&output=csv"
         try:
@@ -1472,7 +1510,7 @@ elif app_mode == "🎧  Call Center":
 # ============================================================
 elif app_mode == "📉  Ausentismo":
 
-    @st.cache_data(ttl=300)
+    @st.cache_data(ttl=3600, max_entries=5) # OPTIMIZADO
     def cargar_ausencias():
         url = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQHFwl-Dxn-Rw9KN_evkCMk2Er8lQqgZMzAtN4LuEkWcCeBVUNwgb8xeIFKvpyxMgeGTeJ3oEWKpMZj/pub?gid=2132722842&single=true&output=csv"
         df = pd.read_csv(url)
@@ -1522,17 +1560,27 @@ elif app_mode == "📉  Ausentismo":
                 </div>
                 """, unsafe_allow_html=True)
 
-            for col in ['DEPARTAMENTO','SERVICIO','MOTIVO','PROFESIONAL']:
-                if col in df_y.columns:
-                    opciones = safe_opts(df_y[col])
-                    if col == 'SERVICIO' and cross_srv:
-                        default_val = [s for s in cross_srv if s in opciones]
-                    elif col == 'DEPARTAMENTO' and cross_dpt:
-                        default_val = [d for d in cross_dpt if d in opciones]
-                    else:
-                        default_val = []
-                    sel = st.multiselect(col, opciones, default=default_val)
-                    if sel: df_y = df_y[df_y[col].isin(sel)]
+            # ── FIX: Usamos callbacks para evitar el doble click en Ausentismo también ──
+            opts_depto_aus = safe_opts(df_y['DEPARTAMENTO']) if 'DEPARTAMENTO' in df_y.columns else []
+            opts_serv_aus  = safe_opts(df_y['SERVICIO']) if 'SERVICIO' in df_y.columns else []
+
+            if 'DEPARTAMENTO' in df_y.columns:
+                def_depto = [d for d in cross_dpt if d in opts_depto_aus]
+                sel_depto = st.multiselect("Departamento", opts_depto_aus, default=def_depto, key='ui_depto_aus', on_change=lambda: st.session_state.update({'cross_depto': st.session_state.ui_depto_aus}))
+                if sel_depto: df_y = df_y[df_y['DEPARTAMENTO'].isin(sel_depto)]
+
+            if 'SERVICIO' in df_y.columns:
+                def_serv = [s for s in cross_srv if s in opts_serv_aus]
+                sel_serv = st.multiselect("Servicio", opts_serv_aus, default=def_serv, key='ui_serv_aus', on_change=lambda: st.session_state.update({'cross_servicio': st.session_state.ui_serv_aus}))
+                if sel_serv: df_y = df_y[df_y['SERVICIO'].isin(sel_serv)]
+
+            if 'MOTIVO' in df_y.columns:
+                sel_motivo = st.multiselect("Motivo", safe_opts(df_y['MOTIVO']))
+                if sel_motivo: df_y = df_y[df_y['MOTIVO'].isin(sel_motivo)]
+
+            if 'PROFESIONAL' in df_y.columns:
+                sel_prof = st.multiselect("Profesional", safe_opts(df_y['PROFESIONAL']))
+                if sel_prof: df_y = df_y[df_y['PROFESIONAL'].isin(sel_prof)]
 
         if df_y.empty:
             st.warning("Sin datos para los filtros seleccionados.")
